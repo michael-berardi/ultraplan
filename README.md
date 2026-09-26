@@ -81,7 +81,7 @@ build step: the CLI runs its TypeScript sources directly with Node's built-in
 type stripping.
 
 ```sh
-npm install --global github:michael-berardi/ultraterm-plan#v0.1.1
+npm install --global github:michael-berardi/ultraterm-plan#v0.1.2
 ut-todo --help
 ```
 

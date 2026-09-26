@@ -1,9 +1,13 @@
 {
   "name": "ultraterm-plan",
   "displayName": "UltraTerm Plan",
-  "version": "0.1.1",
-  "description": "ut-todo — durable phased task progress for Claude Code: phases, one active task, honest blocked states. Shares one store and one rule set with Steak Pi's native todo tool via the package CLI.",
-  "author": { "name": "Implose Cybernetics" },
-  "homepage": "https://github.com/michael-berardi/steak-pi/tree/main/packages/ultraterm-plan",
-  "license": "MIT"
+  "version": "0.1.2",
+  "description": "ut-todo: durable phased task progress for Claude Code. Phases in order, one active task, honest blocked states, shared with Steak Pi's native todo tool.",
+  "author": {
+    "name": "Michael Berardi",
+    "url": "https://github.com/michael-berardi"
+  },
+  "homepage": "https://github.com/michael-berardi/ultraterm-plan#readme",
+  "license": "MIT",
+  "repository": "https://github.com/michael-berardi/ultraterm-plan"
 }

@@ -3,9 +3,18 @@
 All notable changes to UltraTerm Plan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.2 — 2026-09-26
+
+- `ut-todo` now works when installed under `node_modules`, including
+  `npm install --global github:michael-berardi/ultraterm-plan#v0.1.2`. Node
+  refuses to strip TypeScript types inside `node_modules`, so the CLI strips
+  its dependency-free core explicitly in that case. A regression test covers it.
+
 ## 0.1.1 — 2026-09-26
 
-- Install straight from GitHub: `npm install --global github:michael-berardi/ultraterm-plan#v0.1.1`.
+Tag only. Its README advertised a global install that failed with
+`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`; use 0.1.2.
+
 - Package metadata points at this repository; the published file set now
   includes the README and license.
 - A fresh clone can run the checks: development dependencies and a lockfile

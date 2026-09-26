@@ -1,6 +1,6 @@
 {
   "name": "ultraterm-plan",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Phased todo tracking for coding agents: one active task, recorded starts and finishes, blocked items with reasons. Local files, no network. Works with Claude Code, Codex, Pi and any agent with a shell.",
   "license": "MIT",
   "author": "Michael Berardi (https://github.com/michael-berardi)",

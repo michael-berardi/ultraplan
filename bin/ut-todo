@@ -198,7 +198,24 @@ async function loadCore() {
     child.on("error", (error) => fail(`cannot re-exec node with type stripping: ${error.message}`, 3));
     await new Promise(() => {}); // Exit is driven by the child.
   }
-  return import(new URL("../src/core.ts", import.meta.url).href);
+  const coreUrl = new URL("../src/core.ts", import.meta.url);
+  try {
+    return await import(coreUrl.href);
+  } catch (error) {
+    if (error?.code !== "ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING") throw error;
+    // Installed under node_modules (npm install --global): Node refuses to strip
+    // types there, so strip the dependency-free core explicitly and load it
+    // from memory. Same source, same semantics.
+    const { stripTypeScriptTypes } = await import("node:module");
+    const emitWarning = process.emitWarning;
+    process.emitWarning = () => {}; // stripTypeScriptTypes is flagged experimental
+    try {
+      const js = stripTypeScriptTypes(readFileSync(coreUrl, "utf8"));
+      return await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
+    } finally {
+      process.emitWarning = emitWarning;
+    }
+  }
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

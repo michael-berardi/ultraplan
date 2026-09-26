@@ -115,3 +115,27 @@ describe("ut-todo cli", () => {
     expect(existsSync(lock)).toBe(false);
   });
 });
+
+describe("installed under node_modules", () => {
+  it("runs the core even though Node refuses to strip types there", async () => {
+    const root = await tempDir();
+    const pkg = path.join(root, "node_modules", "ultraterm-plan");
+    await fs.mkdir(path.join(pkg, "bin"), { recursive: true });
+    await fs.mkdir(path.join(pkg, "src"), { recursive: true });
+    await fs.copyFile(new URL("../bin/ut-todo", import.meta.url), path.join(pkg, "bin", "ut-todo"));
+    await fs.copyFile(new URL("../src/core.ts", import.meta.url), path.join(pkg, "src", "core.ts"));
+    await fs.writeFile(path.join(pkg, "package.json"), JSON.stringify({ type: "module" }));
+    const cwd = await tempDir();
+    const clean = { ...process.env } as Record<string, string | undefined>;
+    delete clean.CLAUDE_CODE_SESSION_ID;
+    delete clean.UT_TODO_SESSION;
+    const { stdout, stderr } = await run(exec, [path.join(pkg, "bin", "ut-todo"), "init", "Build:edit,test"], {
+      cwd,
+      env: clean,
+      encoding: "utf8",
+      timeout: 30000,
+    });
+    expect(stdout).toContain("1. Build (0/2)");
+    expect(stderr).toBe("");
+  });
+});
