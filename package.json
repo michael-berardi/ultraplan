@@ -1,13 +1,12 @@
 {
   "name": "ultraterm-plan",
-  "version": "0.1.0",
-  "description": "UltraTerm Plan (ut-todo) — durable phased task progress for any agent with a shell: one store, one rule set, shared with Steak Pi's native todo tool.",
+  "version": "0.1.1",
+  "description": "Phased todo tracking for coding agents: one active task, recorded starts and finishes, blocked items with reasons. Local files, no network. Works with Claude Code, Codex, Pi and any agent with a shell.",
   "license": "MIT",
-  "author": "Implose Cybernetics",
+  "author": "Michael Berardi (https://github.com/michael-berardi)",
   "repository": {
     "type": "git",
-    "url": "https://github.com/michael-berardi/steak-pi.git",
-    "directory": "packages/ultraterm-plan"
+    "url": "git+https://github.com/michael-berardi/ultraterm-plan.git"
   },
   "type": "module",
   "bin": {
@@ -25,7 +24,9 @@
     "integrations",
     "pi",
     "src",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=22.19.0"
@@ -58,8 +59,26 @@
     "typebox": ">=1.3.25 <2.0.0"
   },
   "peerDependenciesMeta": {
-    "@earendil-works/pi-coding-agent": { "optional": true },
-    "@earendil-works/pi-tui": { "optional": true },
-    "typebox": { "optional": true }
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    }
+  },
+  "homepage": "https://github.com/michael-berardi/ultraterm-plan#readme",
+  "bugs": {
+    "url": "https://github.com/michael-berardi/ultraterm-plan/issues"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.87.0",
+    "@earendil-works/pi-tui": "0.87.0",
+    "@types/node": "^26.4.1",
+    "typebox": "^1.3.25",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
   }
 }

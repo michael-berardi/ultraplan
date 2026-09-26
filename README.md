@@ -21,9 +21,9 @@ list the model is required to maintain — one active task, recorded starts and
 finishes, blocked items with reasons — stored as plain JSON and Markdown in
 your project. It was extracted, unchanged, from [Steak
 Pi](https://github.com/michael-berardi/steak-pi)'s todo feature, and Steak Pi
-keeps running this exact code: the package lives in Steak Pi's monorepo and
-this repository is its published mirror. Same store, same rules, whether the worker is a
-Pi session or anything else that can run a shell command.
+ships the same state machine as its native `todo` tool. Same store, same
+rules, whether the worker is a Pi session or anything else that can run a
+shell command.
 
 Nothing is marked automatically. Tool activity never advances the list by
 itself; the agent has to record what it did. That is the feature.
@@ -76,29 +76,27 @@ same plan is also pinned natively above the composer.
 
 ## Install
 
-From source (no dependencies, no build step):
+Requires Node.js 22.19 or newer. There are no runtime dependencies and no
+build step: the CLI runs its TypeScript sources directly with Node's built-in
+type stripping.
 
 ```sh
-git clone https://github.com/michael-berardi/ultraterm-plan
-alias ut-todo='node /path/to/ultraterm-plan/bin/ut-todo'
+npm install --global github:michael-berardi/ultraterm-plan#v0.1.1
 ut-todo --help
 ```
 
-The package is not on npm yet. Once it is, the usual forms will work:
+Or run it from a clone:
 
 ```sh
-npm install -g ultraterm-plan      # then: ut-todo view
-npx ultraterm-plan                 # same CLI, no install
+git clone https://github.com/michael-berardi/ultraterm-plan
+alias ut-todo="node $PWD/ultraterm-plan/bin/ut-todo"
+ut-todo --help
 ```
-
-Requires Node.js ≥ 22.19 (it runs TypeScript sources directly with Node's
-built-in type stripping). No dependencies, no build step, no network.
 
 ## Per-agent setup
 
-Honesty policy: supported integrations are listed because the code ships in
-this package. Everything else is served by the CLI, which any agent that can
-run a shell command can use.
+The integrations below ship in this package. Any other agent that can run a
+shell command uses the CLI directly.
 
 **Pi / Steak Pi — native tool (the original).** Steak Pi registers the `todo`
 tool natively, with the plan pinned above the composer and maintenance guidance
@@ -186,6 +184,16 @@ would orphan every existing plan. Names are load-bearing.
 
 ## License
 
-[MIT](./LICENSE) — © 2026 Implose Cybernetics. Extracted from
-[Steak Pi](https://github.com/michael-berardi/steak-pi) and maintained in its
-monorepo; this repository mirrors that package, so the two never drift apart.
+[MIT](./LICENSE) © 2026 Implose Cybernetics. Extracted from
+[Steak Pi](https://github.com/michael-berardi/steak-pi), which ships the same
+core as its native todo tool.
+
+## Development
+
+```sh
+npm install
+npm run typecheck
+npm test
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).

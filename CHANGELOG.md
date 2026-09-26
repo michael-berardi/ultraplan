@@ -1,12 +1,20 @@
 # Changelog
 
-All notable changes to UltraTerm Plan are documented here. The format is a
-plain list; there is no drama and no ceremony.
+All notable changes to UltraTerm Plan are documented here. The project uses
+[Semantic Versioning](https://semver.org/).
 
-## 0.1.0 — unreleased
+## 0.1.1 — 2026-09-26
 
-Initial packaged release. Extracted unchanged from Steak Pi's todo feature so
-the monorepo and a future standalone repository run one implementation:
+- Install straight from GitHub: `npm install --global github:michael-berardi/ultraterm-plan#v0.1.1`.
+- Package metadata points at this repository; the published file set now
+  includes the README and license.
+- A fresh clone can run the checks: development dependencies and a lockfile
+  are declared, so `npm install && npm run typecheck && npm test` works.
+- Added CONTRIBUTING.md, SECURITY.md and a `.gitignore`.
+
+## 0.1.0 — 2026-09-24
+
+Initial packaged release, extracted unchanged from Steak Pi's todo feature:
 
 - `src/core.ts` — the pure phased task state machine (moved from Steak Pi's
   `src/todo-core.ts`): ordered phases, single active task with auto-promotion,
