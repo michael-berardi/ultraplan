@@ -10,6 +10,8 @@ agent. No orchestration theatre.**
 *Phased todo tracking that survives compaction, resume, and a change of agent —
 local files, no network, no status meetings.*
 
+[![Latest release](https://img.shields.io/github/v/release/michael-berardi/ultraterm-plan?label=release)](https://github.com/michael-berardi/ultraterm-plan/releases/latest) [![MIT License](https://img.shields.io/github/license/michael-berardi/ultraterm-plan)](LICENSE) ![Node.js 22.19+](https://img.shields.io/badge/node-22.19%2B-339933) ![Zero runtime dependencies](https://img.shields.io/badge/runtime%20deps-0-brightgreen)
+
 [Install](#install) · [30-second demo](#a-30-second-demo) · [Per-agent setup](#per-agent-setup) · [File format](#file-format-and-where-it-lives) · [FAQ](#faq)
 
 </div>
