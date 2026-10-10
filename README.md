@@ -186,7 +186,7 @@ would orphan every existing plan. Names are load-bearing.
 
 ## License
 
-[MIT](./LICENSE) © 2026 Implose Cybernetics. Extracted from
+[MIT](./LICENSE) © 2026 Pareto Cybernetics. Extracted from
 [Steak Pi](https://github.com/michael-berardi/steak-pi), which ships the same
 core as its native todo tool.
 
