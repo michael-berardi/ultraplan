@@ -16,7 +16,7 @@ const exec = process.execPath;
 
 const tempDirs: string[] = [];
 async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ultraterm-plan-cli-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ultraplan-cli-"));
   tempDirs.push(dir);
   return dir;
 }
@@ -119,7 +119,7 @@ describe("ut-todo cli", () => {
 describe("installed under node_modules", () => {
   it("runs the core even though Node refuses to strip types there", async () => {
     const root = await tempDir();
-    const pkg = path.join(root, "node_modules", "ultraterm-plan");
+    const pkg = path.join(root, "node_modules", "ultraplan");
     await fs.mkdir(path.join(pkg, "bin"), { recursive: true });
     await fs.mkdir(path.join(pkg, "src"), { recursive: true });
     await fs.copyFile(new URL("../bin/ut-todo", import.meta.url), path.join(pkg, "bin", "ut-todo"));

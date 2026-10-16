@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📋 UltraTerm Plan
+# 📋 UltraPlan
 
 ### The plan the agent keeps, and you can read.
 
@@ -10,7 +10,7 @@ agent. No orchestration theatre.**
 *Phased todo tracking that survives compaction, resume, and a change of agent —
 local files, no network, no status meetings.*
 
-[![Latest release](https://img.shields.io/github/v/release/michael-berardi/ultraterm-plan?label=release)](https://github.com/michael-berardi/ultraterm-plan/releases/latest) [![MIT License](https://img.shields.io/github/license/michael-berardi/ultraterm-plan)](LICENSE) ![Node.js 22.19+](https://img.shields.io/badge/node-22.19%2B-339933) ![Zero runtime dependencies](https://img.shields.io/badge/runtime%20deps-0-brightgreen)
+[![Latest release](https://img.shields.io/github/v/release/michael-berardi/ultraplan?label=release)](https://github.com/michael-berardi/ultraplan/releases/latest) [![MIT License](https://img.shields.io/github/license/michael-berardi/ultraplan)](LICENSE) ![Node.js 22.19+](https://img.shields.io/badge/node-22.19%2B-339933) ![Zero runtime dependencies](https://img.shields.io/badge/runtime%20deps-0-brightgreen)
 
 [Install](#install) · [30-second demo](#a-30-second-demo) · [Per-agent setup](#per-agent-setup) · [File format](#file-format-and-where-it-lives) · [FAQ](#faq)
 
@@ -18,7 +18,7 @@ local files, no network, no status meetings.*
 
 ---
 
-UltraTerm Plan is the task tracker for agents that work for a living: a phased
+UltraPlan is the task tracker for agents that work for a living: a phased
 list the model is required to maintain — one active task, recorded starts and
 finishes, blocked items with reasons — stored as plain JSON and Markdown in
 your project. It was extracted, unchanged, from [Steak
@@ -83,15 +83,15 @@ build step: the CLI runs its TypeScript sources directly with Node's built-in
 type stripping.
 
 ```sh
-npm install --global github:michael-berardi/ultraterm-plan#v0.1.2
+npm install --global github:michael-berardi/ultraplan#v0.2.0
 ut-todo --help
 ```
 
 Or run it from a clone:
 
 ```sh
-git clone https://github.com/michael-berardi/ultraterm-plan
-alias ut-todo="node $PWD/ultraterm-plan/bin/ut-todo"
+git clone https://github.com/michael-berardi/ultraplan
+alias ut-todo="node $PWD/ultraplan/bin/ut-todo"
 ut-todo --help
 ```
 
@@ -107,7 +107,7 @@ imports this package's sources directly.
 
 **Claude Code — plugin.** Point Claude Code at
 `integrations/claude-code/` (for example `claude --plugin-dir
-/path/to/ultraterm-plan/integrations/claude-code`): a plugin with a `ut-todo`
+/path/to/ultraplan/integrations/claude-code`): a plugin with a `ut-todo`
 skill (when to plan, how to record honestly), a plugin manifest, and a bin link
 to the CLI. Inside UltraTerm, sessions also get the live owner binding — the
 same per-session store the UltraTerm adapter uses.

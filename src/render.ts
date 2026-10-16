@@ -1,5 +1,5 @@
 /**
- * UltraTerm Plan pinned panel — native Pi TUI component (no HTML, no markdown).
+ * UltraPlan pinned panel — native Pi TUI component (no HTML, no markdown).
  *
  * Boxed, OMP-inspired rendering for the pinned panel above the composer:
  * a `TODO` header with overall progress, one row per phase with its own

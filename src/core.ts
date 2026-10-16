@@ -1,5 +1,5 @@
 /**
- * UltraTerm Plan core — pure state machine (no imports, no I/O).
+ * UltraPlan core — pure state machine (no imports, no I/O).
  *
  * Steak Pi task semantics (identical to the tool Steak Pi has always shipped):
  * - Phased list; phases run in order, items within a phase in order.

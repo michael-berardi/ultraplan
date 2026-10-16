@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // Root is pinned to this package so the suite runs identically from the
-// monorepo root (`vitest run --config packages/ultraterm-plan/vitest.config.ts`)
+// monorepo root (`vitest run --config packages/ultraplan/vitest.config.ts`)
 // and from inside the extracted standalone repository.
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),

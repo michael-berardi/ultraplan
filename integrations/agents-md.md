@@ -1,8 +1,8 @@
-# AGENTS.md snippet — UltraTerm Plan (`ut-todo`)
+# AGENTS.md snippet — UltraPlan (`ut-todo`)
 
 Copy this section into your project's `AGENTS.md` (Codex, Gemini CLI, OpenCode,
 Cursor, and any other agent that reads `AGENTS.md`). It assumes `ut-todo` is on
-PATH (`npm install -g ultraterm-plan` once published, or an alias to
+PATH (`npm install -g ultraplan` once published, or an alias to
 `node <path-to-package>/bin/ut-todo` today — see the package README).
 
 ```markdown

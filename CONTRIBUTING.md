@@ -1,10 +1,10 @@
-# Contributing to UltraTerm Plan
+# Contributing to UltraPlan
 
 Bug reports, focused fixes and documentation improvements are welcome.
 
 ## Before you start
 
-- Search [existing issues](https://github.com/michael-berardi/ultraterm-plan/issues) first.
+- Search [existing issues](https://github.com/michael-berardi/ultraplan/issues) first.
 - For anything larger than a small fix, open an issue describing the problem
   and the change you have in mind, so the approach can be agreed before you
   spend time on it.

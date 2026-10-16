@@ -53,7 +53,7 @@ function planDir(cwd: string, sessionFile: string): string {
 
 const tempDirs: string[] = [];
 async function tempDir(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ultraterm-plan-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ultraplan-"));
   tempDirs.push(dir);
   return dir;
 }
@@ -63,7 +63,7 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
-describe("ultraterm plan pi extension", () => {
+describe("ultraplan pi extension", () => {
   it("registers the todo tool with the native op surface", () => {
     const { handlers } = harness(os.tmpdir());
     expect(handlers.has("session_start")).toBe(true);

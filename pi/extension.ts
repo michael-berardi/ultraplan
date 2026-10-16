@@ -1,5 +1,5 @@
 /**
- * UltraTerm Plan — the Pi-native todo tool and pinned panel.
+ * UltraPlan — the Pi-native todo tool and pinned panel.
  *
  * Moved verbatim from Steak Pi's `extensions/todo.ts`. The two pieces that are
  * Steak Pi's own infrastructure — the shared pinned-panel compositor and the

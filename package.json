@@ -1,12 +1,12 @@
 {
-  "name": "ultraterm-plan",
-  "version": "0.1.2",
+  "name": "ultraplan",
+  "version": "0.2.0",
   "description": "Phased todo tracking for coding agents: one active task, recorded starts and finishes, blocked items with reasons. Local files, no network. Works with Claude Code, Codex, Pi and any agent with a shell.",
   "license": "MIT",
   "author": "Michael Berardi (https://github.com/michael-berardi)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/michael-berardi/ultraterm-plan.git"
+    "url": "git+https://github.com/michael-berardi/ultraplan.git"
   },
   "type": "module",
   "bin": {
@@ -69,9 +69,9 @@
       "optional": true
     }
   },
-  "homepage": "https://github.com/michael-berardi/ultraterm-plan#readme",
+  "homepage": "https://github.com/michael-berardi/ultraplan#readme",
   "bugs": {
-    "url": "https://github.com/michael-berardi/ultraterm-plan/issues"
+    "url": "https://github.com/michael-berardi/ultraplan/issues"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.87.0",

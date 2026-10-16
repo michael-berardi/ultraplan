@@ -22,7 +22,7 @@ function statuses(state: TodoState): string[] {
 
 const THIRTEEN = Array.from({ length: 13 }, (_unused, index) => `task ${index + 1}`);
 
-describe("ultraterm plan core", () => {
+describe("ultraplan core", () => {
   it("init promotes the earliest pending item", () => {
     const { state, output } = applyOp(empty, { op: "init", list: [
       { phase: "Setup", items: ["a", "b"] },
