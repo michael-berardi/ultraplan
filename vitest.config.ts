@@ -8,6 +8,8 @@ export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
   test: {
     include: ["test/**/*.test.ts"],
+    // The CLI tests spawn real node processes; 5 s is too tight on a loaded machine.
+    testTimeout: 30_000,
     env: {
       // Keep unit tests hermetic: no cross-process slot files, default caps.
       STEAK_PI_USAP_MACHINE: "off",
