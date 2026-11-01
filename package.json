@@ -1,6 +1,6 @@
 {
   "name": "ultraplan",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Phased todo tracking for coding agents: one active task, recorded starts and finishes, blocked items with reasons. Local files, no network. Works with Claude Code, Codex, Pi and any agent with a shell.",
   "license": "MIT",
   "author": "Michael Berardi (https://github.com/michael-berardi)",

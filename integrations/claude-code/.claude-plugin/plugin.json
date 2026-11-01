@@ -1,13 +1,12 @@
 {
   "name": "ultraplan",
   "displayName": "UltraPlan",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "ut-todo: durable phased task progress for Claude Code. Phases in order, one active task, honest blocked states, shared with Steak Pi's native todo tool.",
   "author": {
-    "name": "Michael Berardi",
-    "url": "https://github.com/michael-berardi"
+    "name": "Pareto Cybernetics"
   },
-  "homepage": "https://github.com/michael-berardi/ultraplan#readme",
+  "homepage": "https://github.com/your-github-username/ultraplan#readme",
   "license": "MIT",
-  "repository": "https://github.com/michael-berardi/ultraplan"
+  "repository": "https://github.com/your-github-username/ultraplan"
 }

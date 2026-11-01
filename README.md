@@ -10,7 +10,7 @@ agent. No orchestration theatre.**
 *Phased todo tracking that survives compaction, resume, and a change of agent —
 local files, no network, no status meetings.*
 
-[![Latest release](https://img.shields.io/github/v/release/michael-berardi/ultraplan?label=release)](https://github.com/michael-berardi/ultraplan/releases/latest) [![MIT License](https://img.shields.io/github/license/michael-berardi/ultraplan)](LICENSE) ![Node.js 22.19+](https://img.shields.io/badge/node-22.19%2B-339933) ![Zero runtime dependencies](https://img.shields.io/badge/runtime%20deps-0-brightgreen)
+[![Latest release](https://img.shields.io/github/v/release/your-github-username/ultraplan?label=release)](https://github.com/your-github-username/ultraplan/releases/latest) [![MIT License](https://img.shields.io/github/license/your-github-username/ultraplan)](LICENSE) ![Node.js 22.19+](https://img.shields.io/badge/node-22.19%2B-339933) ![Zero runtime dependencies](https://img.shields.io/badge/runtime%20deps-0-brightgreen)
 
 [Install](#install) · [30-second demo](#a-30-second-demo) · [Per-agent setup](#per-agent-setup) · [File format](#file-format-and-where-it-lives) · [FAQ](#faq)
 
@@ -22,7 +22,7 @@ UltraPlan is the task tracker for agents that work for a living: a phased
 list the model is required to maintain — one active task, recorded starts and
 finishes, blocked items with reasons — stored as plain JSON and Markdown in
 your project. It was extracted, unchanged, from [Steak
-Pi](https://github.com/michael-berardi/steak-pi)'s todo feature, and Steak Pi
+Pi](https://github.com/your-github-username/steak-pi)'s todo feature, and Steak Pi
 ships the same state machine as its native `todo` tool. Same store, same
 rules, whether the worker is a Pi session or anything else that can run a
 shell command.
@@ -83,17 +83,20 @@ build step: the CLI runs its TypeScript sources directly with Node's built-in
 type stripping.
 
 ```sh
-npm install --global github:michael-berardi/ultraplan#v0.2.0
+npm install --global github:your-github-username/ultraplan#v0.3.0
 ut-todo --help
 ```
 
 Or run it from a clone:
 
 ```sh
-git clone https://github.com/michael-berardi/ultraplan
+git clone https://github.com/your-github-username/ultraplan
 alias ut-todo="node $PWD/ultraplan/bin/ut-todo"
 ut-todo --help
 ```
+
+Replace `your-github-username` with this repository's GitHub owner, shown in
+the address bar.
 
 ## Per-agent setup
 
@@ -187,7 +190,7 @@ would orphan every existing plan. Names are load-bearing.
 ## License
 
 [MIT](./LICENSE) © 2026 Pareto Cybernetics. Extracted from
-[Steak Pi](https://github.com/michael-berardi/steak-pi), which ships the same
+[Steak Pi](https://github.com/your-github-username/steak-pi), which ships the same
 core as its native todo tool.
 
 ## Development

@@ -3,18 +3,30 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.3.0 — 2026-11-01
+
+- Shipped files name no person. Badges and install commands use a
+  `your-github-username` placeholder (replace it with this repository's GitHub
+  owner), SECURITY.md and CONTRIBUTING.md point at this repository's own
+  Security tab and issues, and the Claude Code plugin manifest credits the
+  copyright holder. The LICENSE and package.json's author and registry fields
+  are legal metadata and are unchanged.
+- `test/neutrality.test.ts` fails the suite when a shipped file names a person
+  or a concrete model id or provider route. The `ut-todo` command, its
+  `.steak-pi/todo/` store and its file format are unchanged.
+
 ## 0.2.0 — 2026-10-16
 
 - Renamed from UltraTerm Plan to UltraPlan. The repository is now
-  `michael-berardi/ultraplan` (old links redirect), and the npm package and
-  Claude Code plugin are named `ultraplan`. The `ut-todo` command, its store
-  and its file format are unchanged. Install with
-  `npm install --global github:michael-berardi/ultraplan#v0.2.0`.
+  `your-github-username/ultraplan` (old links redirect), and the npm package
+  and Claude Code plugin are named `ultraplan`. The `ut-todo` command, its
+  store and its file format are unchanged. Install with
+  `npm install --global github:your-github-username/ultraplan#v0.2.0`.
 
 ## 0.1.2 — 2026-09-26
 
 - `ut-todo` now works when installed under `node_modules`, including
-  `npm install --global github:michael-berardi/ultraplan#v0.1.2`. Node
+  `npm install --global github:your-github-username/ultraplan#v0.1.2`. Node
   refuses to strip TypeScript types inside `node_modules`, so the CLI strips
   its dependency-free core explicitly in that case. A regression test covers it.
 

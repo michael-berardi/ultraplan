@@ -7,9 +7,9 @@ release of UltraPlan is supported.
 
 ## Reporting a vulnerability
 
-Please report vulnerabilities privately through
-[GitHub private vulnerability reporting](https://github.com/michael-berardi/ultraplan/security/advisories/new).
-Do not open a public issue for an undisclosed vulnerability.
+Please report vulnerabilities privately through GitHub private vulnerability
+reporting: open this repository's **Security** tab and choose **Report a
+vulnerability**. Do not open a public issue for an undisclosed vulnerability.
 
 Include the affected version, your operating system, reproduction steps and
 the impact you observed. Leave out credentials, personal data and private
