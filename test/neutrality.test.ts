@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -12,7 +13,7 @@ import { describe, expect, it } from "vitest";
  * - LICENSE, and the author, repository, homepage and bugs fields of
  *   package.json: legal attribution and registry metadata, not product text.
  *   The rest of package.json is scanned.
- * - package-lock.json (generated) and test/ (synthetic fixtures).
+ * - package-lock.json (generated). Tests and docs are scanned for personal terms.
  *
  * Steak Pi, Pi and UltraTerm stay named on purpose: they are the hosts
  * UltraPlan works with, and `.steak-pi/todo/` is the store it shares with
@@ -32,7 +33,22 @@ const MODEL_CHOICE =
 // private home paths. Case-insensitive so a lowercase handle in a URL cannot
 // slip through.
 const PERSONAL =
-  /\b(?:Mike|Michael|Berardi|Dana|Felix|acme|acme|Mouseia|Liberty ?Design|acme)\b|libertydesign|\/Users\/[a-z]/i;
+  /\b(?:Mike|Michael|Berardi|Felix|Mouseia|Liberty ?Design)\b|libertydesign|\/Users\/[a-z]/i;
+
+function privateTerms(file = process.env.OSS_PRIVATE_TERMS ?? path.join(homedir(), ".config/oss-audit/names.txt")): RegExp[] {
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+  return text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#"))
+    .map((term) => {
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(`${/^\w/.test(term) ? "\\b" : ""}${escaped}${/\w$/.test(term) ? "\\b" : ""}`, "i");
+    });
+}
 
 // Documented exceptions: [file, text the line contains, why it may stay].
 // Empty today: the CHANGELOG's history reads the same with the neutral
@@ -60,8 +76,15 @@ function shipped(): Array<[string, string]> {
   return [...texts, ["package.json", JSON.stringify(manifest, null, 2)]];
 }
 
-function hits(pattern: RegExp): string[] {
-  return shipped().flatMap(([file, text]) =>
+function personalTexts(): Array<[string, string]> {
+  const extra = ["test", "tests", "Tests", "docs"].flatMap((dir) =>
+    existsSync(path.join(ROOT, dir)) ? walk(path.join(ROOT, dir)) : [],
+  ).filter((file) => file !== fileURLToPath(import.meta.url));
+  return [...shipped(), ...extra.map((file): [string, string] => [path.relative(ROOT, file), readFileSync(file, "utf8")])];
+}
+
+function hits(pattern: RegExp, texts = shipped()): string[] {
+  return texts.flatMap(([file, text]) =>
     text.split("\n").flatMap((line, i) =>
       pattern.test(line) && !ALLOWED.some(([f, contains]) => f === file && line.includes(contains))
         ? [`${file}:${i + 1}: ${line.trim().slice(0, 120)}`]
@@ -108,7 +131,24 @@ describe("neutrality", () => {
     expect(hits(MODEL_CHOICE)).toEqual([]);
   });
 
+  it("loads private terms as literal bounded matches", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "neutrality-"));
+    try {
+      const terms = path.join(dir, "terms.txt");
+      writeFileSync(terms, "# comment\n\nzzqx-private.term\n");
+      const patterns = privateTerms(terms);
+      expect(patterns).toHaveLength(1);
+      expect(hits(patterns[0], [["probe", "ZZQX-private.term"]])).toHaveLength(1);
+      expect(hits(patterns[0], [["probe", "neutral text zzqx-privateXterm"]])).toEqual([]);
+      expect(privateTerms(path.join(dir, "missing"))).toEqual([]);
+      expect(hits(patterns[0], [["probe", "azzqx-private.term"]])).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("names no person or client", () => {
-    expect(hits(PERSONAL)).toEqual([]);
+    expect(hits(PERSONAL, personalTexts())).toEqual([]);
+    for (const pattern of privateTerms()) expect(hits(pattern, personalTexts())).toEqual([]);
   });
 });
