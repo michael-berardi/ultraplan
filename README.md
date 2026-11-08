@@ -202,3 +202,7 @@ npm test
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+
+---
+
+Part of [Pareto Cybernetics](https://paretocybernetics.com/projects/ultraplan/): free, private, open-source tools for working with AI agents.
