@@ -3,6 +3,18 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+- One-step installers. `scripts/install.sh` (macOS and Linux) and
+  `scripts/install.ps1` (Windows) download the release archive, verify its
+  SHA-256, install under `~/.ultraplan` (Windows `%LOCALAPPDATA%\UltraPlan`)
+  and put `ut-todo` on your PATH. They use the Node 22.19+ already on the
+  machine or fetch the official Node into the tool's own folder, checksum
+  verified. Re-running upgrades in place; no sudo, no shell profile edits.
+  `scripts/build-release.sh` builds the release assets (archive, installers,
+  SHA256SUMS) deterministically, and `scripts/test-install.sh` tests the
+  installers on macOS, in an Ubuntu container and under PowerShell 7.
+
 ## 0.3.0 — 2026-11-01
 
 - Shipped files name no person. Badges and install commands use a

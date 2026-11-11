@@ -78,9 +78,36 @@ same plan is also pinned natively above the composer.
 
 ## Install
 
-Requires Node.js 22.19 or newer. There are no runtime dependencies and no
-build step: the CLI runs its TypeScript sources directly with Node's built-in
-type stripping.
+One step on macOS and Linux:
+
+```sh
+curl -fsSL https://github.com/your-github-username/ultraplan/releases/latest/download/install.sh | sh
+```
+
+One step on Windows (PowerShell 5.1 or 7):
+
+```powershell
+irm https://github.com/your-github-username/ultraplan/releases/latest/download/install.ps1 | iex
+```
+
+Replace `your-github-username` with this repository's GitHub owner, shown in
+the address bar. The installer downloads the release archive, verifies its
+SHA-256 before anything is installed, and puts `ut-todo` on your PATH. It
+installs under `~/.ultraplan` (Windows: `%LOCALAPPDATA%\UltraPlan`) and links
+the command into `~/.local/bin` (Windows: a `bin` folder added to your user
+Path). It uses the Node.js 22.19+ already on your machine, or fetches the
+official Node into UltraPlan's own folder; nothing is installed globally, no
+admin rights needed, no shell profiles edited. There are no runtime
+dependencies and no build step: the CLI runs its TypeScript sources directly
+with Node's built-in type stripping.
+
+To update, run the same one-liner again; it upgrades in place. To remove,
+delete the install folder and the `ut-todo` shim in the bin folder (on Windows
+also remove that bin folder from your user Path).
+
+### Manual install
+
+Requires Node.js 22.19 or newer.
 
 ```sh
 npm install --global github:your-github-username/ultraplan#v0.3.0
