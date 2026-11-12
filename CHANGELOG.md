@@ -3,6 +3,16 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.4.2 — 2026-11-12
+
+- Windows installer fix: adding the bin folder to your user Path no longer
+  turns entries such as `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps`
+  into fixed, expanded text, and keeps the Path value expandable. The folder is
+  recognised as already present whether it is listed literally or through a
+  variable. The installer's helper functions now live inside one function, so
+  `irm | iex` leaves nothing in your session. Linux and macOS: the fallback
+  health check works when your home folder path contains a space.
+
 ## 0.4.1 — 2026-11-11
 
 - Installer fixes (no change to `ut-todo` itself). Windows: the `ut-todo.cmd`

@@ -197,8 +197,9 @@ PSWIN
 
   cat > "$ROOT/ps-unit.ps1" <<'PSUNIT'
 $ErrorActionPreference = 'Stop'
-$env:ULTRAPLAN_PS_TEST_LIBRARY = '1'
+$global:UltraPlanTestLibrary = $true
 . /scripts/install.ps1
+. Install-UltraPlan -DefineHelpersOnly
 function Assert-Eq($got, $want, $what) { if ($got -ne $want) { throw "$what`n got:  $got`n want: $want" } }
 # W1: shim paths relative to the shim when everything is under the tool home, absolute otherwise.
 $t = Get-CmdShimText -HomeDir 'C:\Users\José\AppData\Local\UltraPlan' -BinDir 'C:\Users\José\AppData\Local\UltraPlan\bin' `
@@ -228,7 +229,13 @@ $r = Invoke-Native -Exe 'sh' -Arguments @('-c', 'echo out; echo err >&2; exit 3'
 Assert-Eq $r.Code 3 'exit code'
 if ($r.Output -notmatch 'err') { throw "stderr not captured: $($r.Output)" }
 Assert-Eq $ErrorActionPreference 'Stop' 'ErrorActionPreference restored'
-Write-Host 'ok - pwsh: shim paths, path normalisation, shim marker, native capture'
+# Path entry comparison: literal, expanded, case and trailing backslash.
+$env:UP_T = 'C:\Tools'
+if (-not (Test-PathEntryPresent -UserPath 'C:\a;C:\Bin\;D:\x' -BinDir 'c:\bin')) { throw 'literal entry not found' }
+if (-not (Test-PathEntryPresent -UserPath 'C:\a;%UP_T%\bin' -BinDir 'C:\Tools\bin')) { throw 'expanded entry not found' }
+if (Test-PathEntryPresent -UserPath 'C:\a;C:\Binary' -BinDir 'C:\Bin') { throw 'prefix matched' }
+if (Test-PathEntryPresent -UserPath '' -BinDir 'C:\Bin') { throw 'empty path matched' }
+Write-Host 'ok - pwsh: shim paths, path normalisation, shim marker, native capture, path entry match'
 PSUNIT
   docker run --rm -v "$PWD/scripts:/scripts:ro" -v "$ROOT/ps-unit.ps1:/ps-unit.ps1:ro" \
     "$PWSH_IMAGE" pwsh -NoProfile -File /ps-unit.ps1 || fail "PowerShell 7 unit tests"

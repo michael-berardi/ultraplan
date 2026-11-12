@@ -5,97 +5,112 @@
 # Runs on Windows PowerShell 5.1 and PowerShell 7; also runs under PowerShell 7 on Linux/macOS for testing, with
 # ULTRAPLAN_HOME / ULTRAPLAN_BIN_DIR overrides (defaults there: ~/.ultraplan and ~/.local/bin).
 # Environment: ULTRAPLAN_HOME, ULTRAPLAN_BIN_DIR, ULTRAPLAN_VERSION (e.g. 0.3.0), ULTRAPLAN_RELEASE_BASE (tests).
-$script:ShimMarker = 'ultraplan-installer-shim'
-
-# Run a native command and capture its output. Windows PowerShell 5.1 turns the first stderr line of a native command
-# into a terminating error under $ErrorActionPreference = 'Stop' when stderr is redirected, so relax it for the call.
-function Invoke-Native {
-  param([string]$Exe, [string[]]$Arguments = @())
-  $old = $ErrorActionPreference
-  $ErrorActionPreference = 'Continue'
-  try {
-    $out = & $Exe @Arguments 2>&1
-    $code = $LASTEXITCODE
-  } finally { $ErrorActionPreference = $old }
-  [pscustomobject]@{ Code = $code; Output = ((@($out) | ForEach-Object { "$_" }) -join "`n").Trim() }
-}
-
-function Invoke-Download {
-  param([string]$Url, [string]$OutFile)
-  try { Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing }
-  catch { throw "download failed: $Url ($($_.Exception.Message))" }
-}
-
-function Get-Sha256 {
-  param([string]$File)
-  (Get-FileHash -Path $File -Algorithm SHA256).Hash.ToLower()
-}
-
-function Test-Checksum {
-  param([string]$File, [string]$Name, [string]$SumsFile)
-  $line = Get-Content -Path $SumsFile | Where-Object { $_ -match "\s$([regex]::Escape($Name))$" } | Select-Object -First 1
-  if (-not $line) { throw "no checksum for $Name in $(Split-Path -Leaf $SumsFile)" }
-  $want = ($line -split '\s+')[0].ToLower()
-  if ((Get-Sha256 -File $File) -ne $want) { throw "checksum mismatch for $Name; nothing was installed" }
-}
-
-function Test-NodeOk {
-  param([string]$Exe)
-  try {
-    $r = Invoke-Native -Exe $Exe -Arguments @('-p', 'process.versions.node')
-    if ($r.Code -ne 0 -or -not $r.Output) { return $false }
-    $p = $r.Output.Split('.')
-    return ([int]$p[0] -gt 22) -or ([int]$p[0] -eq 22 -and [int]$p[1] -ge 19)
-  } catch { return $false }
-}
-
-# Absolute, normalised path (no `..`, no `/` mix-ups, relative overrides resolved against the current folder).
-function Resolve-FullPath {
-  param([string]$Path)
-  $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
-}
-
-# Path of $Path relative to $Base using backslashes, or $null when $Path is not inside $Base. Windows paths are case-insensitive.
-function Get-RelativeInside {
-  param([string]$Base, [string]$Path)
-  $b = ($Base -replace '/', '\').TrimEnd('\')
-  $p = ($Path -replace '/', '\')
-  if ($p.Length -gt $b.Length + 1 -and $p.StartsWith($b + '\', [StringComparison]::OrdinalIgnoreCase)) { return $p.Substring($b.Length + 1) }
-  return $null
-}
-
-# Text of ut-todo.cmd. When the shim and its targets are all under the tool's own home, paths are relative to the shim
-# (%~dp0), so a non-ASCII user profile cannot break them. Otherwise absolute paths are used (the caller writes them in the OEM code page).
-function Get-CmdShimText {
-  param([string]$HomeDir, [string]$BinDir, [string]$NodeBin, [string]$BinPath, [bool]$NodeOnPath)
-  $binRel = Get-RelativeInside -Base $HomeDir -Path $BinDir
-  $depth = if ($null -ne $binRel) { @($binRel -split '\\' | Where-Object { $_ }).Count } else { -1 }
-  $up = if ($depth -ge 0) { '%~dp0' + ('..\' * $depth) } else { $null }
-  $scriptRel = Get-RelativeInside -Base $HomeDir -Path $BinPath
-  $nodeRel = Get-RelativeInside -Base $HomeDir -Path $NodeBin
-  $scriptRef = if ($up -and $scriptRel) { "$up$scriptRel" } else { $BinPath }
-  $nodeRef = if ($NodeOnPath) { 'node' } elseif ($up -and $nodeRel) { "$up$nodeRel" } else { $NodeBin }
-  "@echo off`r`nREM $script:ShimMarker`r`n`"$nodeRef`" `"$scriptRef`" %*`r`n"
-}
-
-# True when the file at $Path was written by this installer (marker line, or the 0.4.0 shape without a marker).
-function Test-OurShim {
-  param([string]$Path)
-  try { $t = [IO.File]::ReadAllText($Path) } catch { return $false }
-  return ($t.Contains($script:ShimMarker)) -or ($t -match '[\\/]app[\\/]release-[^\\/"]+[\\/]bin[\\/]ut-todo')
-}
-
-function Write-ShimFile {
-  param([string]$Path, [string]$Text, [bool]$Oem)
-  $enc = New-Object System.Text.UTF8Encoding $false
-  if ($Oem) {
-    try { $enc = [Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage) }
-    catch { $enc = [Text.Encoding]::ASCII }
-  }
-  [IO.File]::WriteAllText($Path, $Text, $enc)
-}
-
 function Install-UltraPlan {
+  param([switch]$DefineHelpersOnly)
+  # Helpers live inside this function so `irm | iex` leaves nothing behind in the user's session.
+  $ShimMarker = 'ultraplan-installer-shim'
+
+  # Run a native command and capture its output. Windows PowerShell 5.1 turns the first stderr line of a native command
+  # into a terminating error under $ErrorActionPreference = 'Stop' when stderr is redirected, so relax it for the call.
+  function Invoke-Native {
+    param([string]$Exe, [string[]]$Arguments = @())
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+      $out = & $Exe @Arguments 2>&1
+      $code = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $old }
+    [pscustomobject]@{ Code = $code; Output = ((@($out) | ForEach-Object { "$_" }) -join "`n").Trim() }
+  }
+
+  function Invoke-Download {
+    param([string]$Url, [string]$OutFile)
+    try { Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing }
+    catch { throw "download failed: $Url ($($_.Exception.Message))" }
+  }
+
+  function Get-Sha256 {
+    param([string]$File)
+    (Get-FileHash -Path $File -Algorithm SHA256).Hash.ToLower()
+  }
+
+  function Test-Checksum {
+    param([string]$File, [string]$Name, [string]$SumsFile)
+    $line = Get-Content -Path $SumsFile | Where-Object { $_ -match "\s$([regex]::Escape($Name))$" } | Select-Object -First 1
+    if (-not $line) { throw "no checksum for $Name in $(Split-Path -Leaf $SumsFile)" }
+    $want = ($line -split '\s+')[0].ToLower()
+    if ((Get-Sha256 -File $File) -ne $want) { throw "checksum mismatch for $Name; nothing was installed" }
+  }
+
+  function Test-NodeOk {
+    param([string]$Exe)
+    try {
+      $r = Invoke-Native -Exe $Exe -Arguments @('-p', 'process.versions.node')
+      if ($r.Code -ne 0 -or -not $r.Output) { return $false }
+      $p = $r.Output.Split('.')
+      return ([int]$p[0] -gt 22) -or ([int]$p[0] -eq 22 -and [int]$p[1] -ge 19)
+    } catch { return $false }
+  }
+
+  # Absolute, normalised path (no `..`, no `/` mix-ups, relative overrides resolved against the current folder).
+  function Resolve-FullPath {
+    param([string]$Path)
+    $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+  }
+
+  # Path of $Path relative to $Base using backslashes, or $null when $Path is not inside $Base. Windows paths are case-insensitive.
+  function Get-RelativeInside {
+    param([string]$Base, [string]$Path)
+    $b = ($Base -replace '/', '\').TrimEnd('\')
+    $p = ($Path -replace '/', '\')
+    if ($p.Length -gt $b.Length + 1 -and $p.StartsWith($b + '\', [StringComparison]::OrdinalIgnoreCase)) { return $p.Substring($b.Length + 1) }
+    return $null
+  }
+
+  # Text of ut-todo.cmd. When the shim and its targets are all under the tool's own home, paths are relative to the shim
+  # (%~dp0), so a non-ASCII user profile cannot break them. Otherwise absolute paths are used (the caller writes them in the OEM code page).
+  function Get-CmdShimText {
+    param([string]$HomeDir, [string]$BinDir, [string]$NodeBin, [string]$BinPath, [bool]$NodeOnPath)
+    $binRel = Get-RelativeInside -Base $HomeDir -Path $BinDir
+    $depth = if ($null -ne $binRel) { @($binRel -split '\\' | Where-Object { $_ }).Count } else { -1 }
+    $up = if ($depth -ge 0) { '%~dp0' + ('..\' * $depth) } else { $null }
+    $scriptRel = Get-RelativeInside -Base $HomeDir -Path $BinPath
+    $nodeRel = Get-RelativeInside -Base $HomeDir -Path $NodeBin
+    $scriptRef = if ($up -and $scriptRel) { "$up$scriptRel" } else { $BinPath }
+    $nodeRef = if ($NodeOnPath) { 'node' } elseif ($up -and $nodeRel) { "$up$nodeRel" } else { $NodeBin }
+    "@echo off`r`nREM $ShimMarker`r`n`"$nodeRef`" `"$scriptRef`" %*`r`n"
+  }
+
+  # True when the file at $Path was written by this installer (marker line, or the 0.4.0 shape without a marker).
+  function Test-OurShim {
+    param([string]$Path)
+    try { $t = [IO.File]::ReadAllText($Path) } catch { return $false }
+    return ($t.Contains($ShimMarker)) -or ($t -match '[\\/]app[\\/]release-[^\\/"]+[\\/]bin[\\/]ut-todo')
+  }
+
+  function Write-ShimFile {
+    param([string]$Path, [string]$Text, [bool]$Oem)
+    $enc = New-Object System.Text.UTF8Encoding $false
+    if ($Oem) {
+      try { $enc = [Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage) }
+      catch { $enc = [Text.Encoding]::ASCII }
+    }
+    [IO.File]::WriteAllText($Path, $Text, $enc)
+  }
+
+
+  # True when $UserPath (the raw, unexpanded semicolon list) already holds $BinDir: an entry equals it literally, or after
+  # %VAR% expansion, ignoring case and a trailing backslash.
+  function Test-PathEntryPresent {
+    param([string]$UserPath, [string]$BinDir)
+    $want = $BinDir.TrimEnd('\')
+    $hits = @($UserPath -split ';' | Where-Object {
+      $_ -and (($_.TrimEnd('\') -ieq $want) -or ([Environment]::ExpandEnvironmentVariables($_).TrimEnd('\') -ieq $want))
+    })
+    return ($hits.Count -gt 0)
+  }
+
+  if ($DefineHelpersOnly) { return }
   $ErrorActionPreference = 'Stop'
   $PSNativeCommandUseErrorActionPreference = $false
   $ProgressPreference = 'SilentlyContinue'
@@ -225,7 +240,7 @@ function Install-UltraPlan {
         $onPath = [bool]($sysNode -and $nodeBin -eq $sysNode.Source)
         $shimText = Get-CmdShimText -HomeDir $homeDir -BinDir $binDir -NodeBin $nodeBin -BinPath $binPath -NodeOnPath $onPath
       } else {
-        $shimText = "#!/bin/sh`n# $script:ShimMarker`nexec `"$nodeBin`" `"$binPath`" `"`$@`"`n"
+        $shimText = "#!/bin/sh`n# $ShimMarker`nexec `"$nodeBin`" `"$binPath`" `"`$@`"`n"
       }
       Write-ShimFile -Path "$shim.tmp" -Text $shimText -Oem $isWin
       if (-not $isWin) { & chmod 755 "$shim.tmp"; if ($LASTEXITCODE -ne 0) { throw 'cannot make the ut-todo shim executable' } }
@@ -244,13 +259,21 @@ function Install-UltraPlan {
     else { Write-Host "UltraPlan $version installed; run it with: $nodeBin $binPath" }
     Write-Host $r.Output
     if ($isWin) {
-      $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-      if (-not $userPath) { $userPath = '' }
-      $parts = @($userPath -split ';' | Where-Object { $_ })
-      if ($parts -notcontains $binDir) {
-        [Environment]::SetEnvironmentVariable('Path', (($parts + $binDir) -join ';'), 'User')
-        Write-Host "Added $binDir to your user Path; open a new terminal to use ut-todo."
-      }
+      # Add the bin folder to the USER Path only when absent. The raw value is read without expanding %VAR% entries and
+      # written back with its original registry type, so a stock %USERPROFILE%\... entry keeps expanding.
+      $envKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+      try {
+        $userPath = [string]$envKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        if (-not (Test-PathEntryPresent -UserPath $userPath -BinDir $binDir)) {
+          $newPath = if ($userPath) { $userPath.TrimEnd(';') + ';' + $binDir } else { $binDir }
+          $kind = if ($null -ne $envKey.GetValue('Path', $null)) { $envKey.GetValueKind('Path') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+          $envKey.SetValue('Path', $newPath, $kind)
+          # Setting and clearing a dummy user variable broadcasts the change so new terminals pick the Path up.
+          [Environment]::SetEnvironmentVariable('ULTRAPLAN_PATH_REFRESH', '1', 'User')
+          [Environment]::SetEnvironmentVariable('ULTRAPLAN_PATH_REFRESH', $null, 'User')
+          Write-Host "Added $binDir to your user Path; open a new terminal to use ut-todo."
+        }
+      } finally { if ($envKey) { $envKey.Close() } }
     } else {
       if (($env:PATH -split ':') -notcontains $binDir) {
         Write-Host "Add $binDir to your PATH:  export PATH=`"$binDir`:`$PATH`""
@@ -263,5 +286,6 @@ function Install-UltraPlan {
   }
 }
 
-# ULTRAPLAN_PS_TEST_LIBRARY lets the tests load the helper functions without installing.
-if (-not $env:ULTRAPLAN_PS_TEST_LIBRARY) { Install-UltraPlan }
+# Tests set the PowerShell variable $global:UltraPlanTestLibrary (an environment variable cannot) and then run
+# `. Install-UltraPlan -DefineHelpersOnly` to load the helper functions without installing.
+if (-not (Get-Variable -Name UltraPlanTestLibrary -Scope Global -ErrorAction SilentlyContinue)) { Install-UltraPlan }

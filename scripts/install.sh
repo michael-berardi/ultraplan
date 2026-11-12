@@ -125,9 +125,8 @@ for d in "$APP"/release-*; do
 done
 
 # Finish with the tool's own health command; a failed check fails the install.
-if [ "$OUR_SHIM" = 1 ]; then CMD="$BIN_DIR/ut-todo"; else CMD="$NODE_BIN $REL/bin/ut-todo"; fi
-# shellcheck disable=SC2086
-got=$($CMD --help 2>&1 </dev/null) || die "the installed ut-todo does not run: $got"
+if [ "$OUR_SHIM" = 1 ]; then got=$("$BIN_DIR/ut-todo" --help 2>&1 </dev/null) || die "the installed ut-todo does not run: $got"
+else got=$("$NODE_BIN" "$REL/bin/ut-todo" --help 2>&1 </dev/null) || die "the installed ut-todo does not run: $got"; fi
 if [ "$OUR_SHIM" = 1 ]; then say "UltraPlan $VERSION installed ($BIN_DIR/ut-todo)."
 else say "UltraPlan $VERSION installed; run it with: $NODE_BIN $REL/bin/ut-todo"; fi
 say "$got"
