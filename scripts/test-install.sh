@@ -21,7 +21,8 @@ pass() { printf 'ok - %s\n' "$1"; }
 fail() { printf 'FAIL - %s\n' "$1" >&2; exit 1; }
 
 scripts/build-release.sh dist/release
-ROOT=$(mktemp -d "${TMPDIR:-/tmp}/ultraplan-test.XXXXXX")
+# The workspace lives under dist/ (gitignored): the Docker VM shares the checkout path, not $TMPDIR.
+ROOT=$(mktemp -d "$PWD/dist/test-install.XXXXXX")
 SRV=""
 cleanup() {
   if [ -n "$SRV" ]; then kill "$SRV" 2>/dev/null || true; wait "$SRV" 2>/dev/null || true; fi
