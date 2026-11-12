@@ -3,7 +3,7 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.4.0 — 2026-11-11
 
 - One-step installers. `scripts/install.sh` (macOS and Linux) and
   `scripts/install.ps1` (Windows) download the release archive, verify its
