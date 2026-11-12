@@ -132,6 +132,20 @@ LINUX
   docker run --rm -v "$PWD/scripts:/scripts:ro" -v "$ROOT/linux-test.sh:/linux-test.sh:ro" \
     -e BASE="$DOCKER_BASE" ubuntu:24.04 sh /linux-test.sh || fail "ubuntu:24.04 container tests"
 
+# mcr.microsoft.com/powershell publishes no arm64 Linux image (amd64 and 32-bit arm only), so the
+# PowerShell 7 tests run in a small local image: ubuntu:24.04 plus Microsoft's official tarball.
+PS_VERSION=7.4.6
+PWSH_IMAGE="pwsh-install-test:$PS_VERSION"
+if ! docker image inspect "$PWSH_IMAGE" >/dev/null 2>&1; then
+  docker build -q -t "$PWSH_IMAGE" - >/dev/null <<DOCKERFILE || fail "cannot build the PowerShell $PS_VERSION test image"
+FROM ubuntu:24.04
+RUN apt-get update -qq && apt-get install -y -qq ca-certificates curl libicu74 >/dev/null \\
+ && case "\$(uname -m)" in aarch64) a=arm64 ;; x86_64) a=x64 ;; *) echo "unsupported CPU \$(uname -m)" >&2; exit 1 ;; esac \\
+ && curl -fsSL --retry 3 -o /tmp/ps.tgz "https://github.com/PowerShell/PowerShell/releases/download/v$PS_VERSION/powershell-$PS_VERSION-linux-\$a.tar.gz" \\
+ && mkdir -p /opt/powershell && tar -xzf /tmp/ps.tgz -C /opt/powershell && chmod +x /opt/powershell/pwsh \\
+ && ln -s /opt/powershell/pwsh /usr/bin/pwsh && rm /tmp/ps.tgz
+DOCKERFILE
+fi
   cat > "$ROOT/ps-test.ps1" <<'PSWIN'
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -159,7 +173,7 @@ if (Test-Path '/root/.ultraplan-bad/app') { throw 'corrupted install left files 
 Write-Host 'ok - pwsh: corrupted archive refused with checksum error, nothing installed'
 PSWIN
   docker run --rm -v "$PWD/scripts:/scripts:ro" -v "$ROOT/ps-test.ps1:/ps-test.ps1:ro" \
-    -e TEST_PORT="$PORT" mcr.microsoft.com/powershell pwsh -NoProfile -File /ps-test.ps1 \
+    -e TEST_PORT="$PORT" "$PWSH_IMAGE" pwsh -NoProfile -File /ps-test.ps1 \
     || fail "PowerShell 7 (Linux) container tests"
 
   cat > "$ROOT/ps-analyze.ps1" <<'PSA'
@@ -175,7 +189,7 @@ if ($r) { $r | Format-Table -AutoSize | Out-String | Write-Host; exit 1 }
 Write-Host 'ok - PSScriptAnalyzer: install.ps1 clean'
 PSA
   docker run --rm -v "$PWD/scripts:/scripts:ro" -v "$ROOT/ps-analyze.ps1:/ps-analyze.ps1:ro" \
-    mcr.microsoft.com/powershell pwsh -NoProfile -File /ps-analyze.ps1 \
+    "$PWSH_IMAGE" pwsh -NoProfile -File /ps-analyze.ps1 \
     || fail "PSScriptAnalyzer reported findings in install.ps1"
 fi
 
