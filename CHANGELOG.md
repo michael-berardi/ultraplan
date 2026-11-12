@@ -3,6 +3,20 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.4.1 — 2026-11-11
+
+- Installer fixes (no change to `ut-todo` itself). Windows: the `ut-todo.cmd`
+  shim no longer breaks when your user name has non-ASCII letters (it uses
+  paths relative to the shim, or the console code page for a custom bin
+  folder); the release is unpacked inside UltraPlan's own folder, so installs
+  work when `%TEMP%` is on another drive; stderr output from Node no longer
+  aborts the install on Windows PowerShell 5.1; a relative or slash-style
+  `ULTRAPLAN_HOME` no longer deletes the release just installed; the script
+  runs inside a function so `irm | iex` leaves no variables or error
+  preference in your session. macOS, Linux and Windows: the installer never
+  overwrites an existing `ut-todo` it did not write (it says so and leaves it),
+  and the wrapper pins the absolute path of the Node it verified.
+
 ## 0.4.0 — 2026-11-11
 
 - One-step installers. `scripts/install.sh` (macOS and Linux) and

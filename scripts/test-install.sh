@@ -129,6 +129,24 @@ if PATH=/tmp/emptybin /bin/sh /scripts/install.sh > /tmp/lin5.log 2>&1; then
 fi
 grep -q 'needs curl or wget' /tmp/lin5.log || { cat /tmp/lin5.log >&2; echo "FAIL - linux: prerequisite error does not name the cause" >&2; exit 1; }
 echo 'ok - linux: missing prerequisite named (curl or wget)'
+# install.sh: a foreign ut-todo is left alone; a marker wrapper is upgraded; Node on PATH is pinned by absolute path.
+mkdir -p /tmp/w7bin
+printf '#!/bin/sh\necho mine\n' > /tmp/w7bin/ut-todo; chmod 755 /tmp/w7bin/ut-todo
+ULTRAPLAN_HOME=/root/.up7 ULTRAPLAN_BIN_DIR=/tmp/w7bin ULTRAPLAN_RELEASE_BASE="$BASE/good" \
+  sh /scripts/install.sh > /tmp/lin7.log 2>&1 || { cat /tmp/lin7.log >&2; echo "FAIL - linux install beside a foreign ut-todo" >&2; exit 1; }
+grep -q 'left alone' /tmp/lin7.log || { echo "FAIL - foreign ut-todo not reported" >&2; exit 1; }
+grep -q 'echo mine' /tmp/w7bin/ut-todo || { echo "FAIL - foreign ut-todo was overwritten" >&2; exit 1; }
+rm /tmp/w7bin/ut-todo
+ULTRAPLAN_HOME=/root/.up7 ULTRAPLAN_BIN_DIR=/tmp/w7bin ULTRAPLAN_RELEASE_BASE="$BASE/good" sh /scripts/install.sh > /tmp/lin8.log 2>&1 || { cat /tmp/lin8.log >&2; exit 1; }
+grep -q 'ultraplan-installer-shim' /tmp/w7bin/ut-todo || { echo "FAIL - wrapper has no marker" >&2; exit 1; }
+ULTRAPLAN_HOME=/root/.up7 ULTRAPLAN_BIN_DIR=/tmp/w7bin ULTRAPLAN_RELEASE_BASE="$BASE/good" sh /scripts/install.sh > /tmp/lin9.log 2>&1 || { cat /tmp/lin9.log >&2; exit 1; }
+if grep -q 'left alone' /tmp/lin9.log; then echo "FAIL - own marker wrapper treated as foreign" >&2; exit 1; fi
+echo 'ok - linux: foreign ut-todo left alone, marker wrapper upgraded'
+NODEDIR=$(dirname "$(ls /root/.ultraplan/app/runtime/node-*/bin/node)")
+PATH="$NODEDIR:$PATH" ULTRAPLAN_HOME=/root/.up8 ULTRAPLAN_BIN_DIR=/root/.local/bin8 ULTRAPLAN_RELEASE_BASE="$BASE/good" \
+  sh /scripts/install.sh > /tmp/lin10.log 2>&1 || { cat /tmp/lin10.log >&2; exit 1; }
+grep -q "^exec \"$NODEDIR/node\"" /root/.local/bin8/ut-todo || { cat /root/.local/bin8/ut-todo >&2; echo "FAIL - wrapper does not pin the absolute node path" >&2; exit 1; }
+echo 'ok - linux: wrapper pins the absolute node path'
 LINUX
   docker run --rm -v "$PWD/scripts:/scripts:ro" -v "$ROOT/linux-test.sh:/linux-test.sh:ro" \
     -e BASE="$DOCKER_BASE" ubuntu:24.04 sh /linux-test.sh || fail "ubuntu:24.04 container tests"
@@ -176,6 +194,74 @@ PSWIN
   docker run --rm -v "$PWD/scripts:/scripts:ro" -v "$ROOT/ps-test.ps1:/ps-test.ps1:ro" \
     -e TEST_PORT="$PORT" "$PWSH_IMAGE" pwsh -NoProfile -File /ps-test.ps1 \
     || fail "PowerShell 7 (Linux) container tests"
+
+  cat > "$ROOT/ps-unit.ps1" <<'PSUNIT'
+$ErrorActionPreference = 'Stop'
+$env:ULTRAPLAN_PS_TEST_LIBRARY = '1'
+. /scripts/install.ps1
+function Assert-Eq($got, $want, $what) { if ($got -ne $want) { throw "$what`n got:  $got`n want: $want" } }
+# W1: shim paths relative to the shim when everything is under the tool home, absolute otherwise.
+$t = Get-CmdShimText -HomeDir 'C:\Users\José\AppData\Local\UltraPlan' -BinDir 'C:\Users\José\AppData\Local\UltraPlan\bin' `
+  -NodeBin 'C:\Users\José\AppData\Local\UltraPlan\app\runtime\node-22.20.0-win-x64\node.exe' `
+  -BinPath 'C:\Users\José\AppData\Local\UltraPlan\app\release-0.4.1\bin\ut-todo' -NodeOnPath $false
+Assert-Eq $t "@echo off`r`nREM ultraplan-installer-shim`r`n`"%~dp0..\app\runtime\node-22.20.0-win-x64\node.exe`" `"%~dp0..\app\release-0.4.1\bin\ut-todo`" %*`r`n" 'relative shim'
+if ($t -match 'José') { throw 'relative shim still names the profile' }
+$t = Get-CmdShimText -HomeDir 'C:\h\UP' -BinDir 'D:\tools\bin' -NodeBin 'C:\h\UP\app\n\node.exe' -BinPath 'C:\h\UP\app\release-1\bin\ut-todo' -NodeOnPath $true
+Assert-Eq $t "@echo off`r`nREM ultraplan-installer-shim`r`n`"node`" `"C:\h\UP\app\release-1\bin\ut-todo`" %*`r`n" 'absolute shim for a bin dir elsewhere, node on PATH'
+$t = Get-CmdShimText -HomeDir 'C:\h\UP' -BinDir 'c:/h/up/a/b' -NodeBin 'C:\Program Files\nodejs\node.exe' -BinPath 'C:\h\UP\app\release-1\bin\ut-todo' -NodeOnPath $false
+Assert-Eq $t "@echo off`r`nREM ultraplan-installer-shim`r`n`"C:\Program Files\nodejs\node.exe`" `"%~dp0..\..\app\release-1\bin\ut-todo`" %*`r`n" 'nested bin dir, mixed slashes'
+# W4: a relative or slash-mixed override resolves to an absolute path.
+Push-Location /tmp
+$r = Resolve-FullPath 'rel/../x/./y'
+Pop-Location
+Assert-Eq $r '/tmp/x/y' 'Resolve-FullPath'
+# W7: marker handling.
+$d = '/tmp/shimtest'; New-Item -ItemType Directory -Force $d | Out-Null
+Set-Content "$d/ours" "#!/bin/sh`n# ultraplan-installer-shim`nexec node x"
+Set-Content "$d/legacy" "#!/bin/sh`nexec `"/r/.ultraplan/app/release-0.4.0/bin/ut-todo`""
+Set-Content "$d/theirs" "#!/bin/sh`necho mine"
+if (-not (Test-OurShim "$d/ours")) { throw 'marker shim not recognised' }
+if (-not (Test-OurShim "$d/legacy")) { throw '0.4.0 shim not recognised' }
+if (Test-OurShim "$d/theirs") { throw 'foreign file taken for our shim' }
+# W3: Invoke-Native captures stderr and the exit code without a terminating error.
+$r = Invoke-Native -Exe 'sh' -Arguments @('-c', 'echo out; echo err >&2; exit 3')
+Assert-Eq $r.Code 3 'exit code'
+if ($r.Output -notmatch 'err') { throw "stderr not captured: $($r.Output)" }
+Assert-Eq $ErrorActionPreference 'Stop' 'ErrorActionPreference restored'
+Write-Host 'ok - pwsh: shim paths, path normalisation, shim marker, native capture'
+PSUNIT
+  docker run --rm -v "$PWD/scripts:/scripts:ro" -v "$ROOT/ps-unit.ps1:/ps-unit.ps1:ro" \
+    "$PWSH_IMAGE" pwsh -NoProfile -File /ps-unit.ps1 || fail "PowerShell 7 unit tests"
+
+  cat > "$ROOT/ps-w4.ps1" <<'PSW4'
+$ErrorActionPreference = 'Stop'
+$base = "http://host.docker.internal:$env:TEST_PORT"
+# Foreign file at the shim path is left alone; a relative HOME override with a second install keeps the new release.
+New-Item -ItemType Directory -Force /root/w/bin | Out-Null
+Set-Content /root/w/bin/ut-todo "#!/bin/sh`necho mine"
+Set-Location /root/w
+$env:ULTRAPLAN_HOME = './up/../up'; $env:ULTRAPLAN_BIN_DIR = 'bin'; $env:ULTRAPLAN_RELEASE_BASE = "$base/good"
+$out = & pwsh -NoProfile -File /scripts/install.ps1 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) { throw "install failed: $out" }
+if ($out -notmatch 'left alone') { throw "no left-alone message: $out" }
+if ((Get-Content /root/w/bin/ut-todo -Raw) -notmatch 'echo mine') { throw 'foreign file was overwritten' }
+$rels = @(Get-ChildItem /root/w/up/app -Directory -Filter 'release-*')
+if ($rels.Count -ne 1) { throw 'relative HOME: the installed release was deleted' }
+if (Get-ChildItem /root/w/up/app -Force -Filter '.staging-*') { throw 'staging folder left behind' }
+if (-not (Test-Path /root/w/up/app/runtime)) { throw 'runtime missing' }
+& pwsh -NoProfile -File /scripts/install.ps1 | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 're-run failed' }
+@(Get-ChildItem /root/w/up/app -Directory -Filter 'release-*').Count | ForEach-Object { if ($_ -ne 1) { throw 'release lost on re-run' } }
+Remove-Item /root/w/bin/ut-todo
+& pwsh -NoProfile -File /scripts/install.ps1 | Out-Null
+if ((Get-Content /root/w/bin/ut-todo -Raw) -notmatch 'ultraplan-installer-shim') { throw 'shim has no marker' }
+& pwsh -NoProfile -File /scripts/install.ps1 | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'marker shim was not recognised as ours on re-run' }
+Write-Host 'ok - pwsh: relative HOME keeps the release, foreign file left alone, marker shim upgraded, no staging left'
+PSW4
+  docker run --rm -v "$PWD/scripts:/scripts:ro" -v "$ROOT/ps-w4.ps1:/ps-w4.ps1:ro" \
+    -e TEST_PORT="$PORT" "$PWSH_IMAGE" pwsh -NoProfile -File /ps-w4.ps1 \
+    || fail "PowerShell 7 relative-path and shim-marker tests"
 
   cat > "$ROOT/ps-analyze.ps1" <<'PSA'
 $ErrorActionPreference = 'Stop'

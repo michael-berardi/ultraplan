@@ -110,7 +110,7 @@ also remove that bin folder from your user Path).
 Requires Node.js 22.19 or newer.
 
 ```sh
-npm install --global github:your-github-username/ultraplan#v0.4.0
+npm install --global github:your-github-username/ultraplan#v0.4.1
 ut-todo --help
 ```
 

@@ -63,7 +63,7 @@ REL="$APP/release-$VERSION"
 # Node: the one on PATH when it is new enough, else the official build, kept inside UltraPlan's own folder.
 NODE_BIN=""
 if command -v node >/dev/null 2>&1 && node_ok "$(command -v node)"; then
-  NODE_BIN=node
+  NODE_BIN=$(command -v node)
 else
   ls /lib/ld-musl-* >/dev/null 2>&1 && die "this system uses musl (Alpine): install Node 22.19+ with its package manager (apk add nodejs npm), then run this again"
   case "$(uname -s)" in Darwin) os=darwin ;; Linux) os=linux ;; *) die "unsupported system $(uname -s); on Windows use install.ps1" ;; esac
@@ -100,12 +100,24 @@ else
   say "UltraPlan $VERSION is already unpacked; relinking."
 fi
 
-# `ut-todo` on PATH: a wrapper pinned to the Node that was verified above.
+# `ut-todo` on PATH: a wrapper pinned to the Node that was verified above. Every wrapper carries a marker line; a
+# file at that path without the marker (or the 0.4.0 wrapper shape) is the user's own and is never overwritten.
+MARKER="# ultraplan-installer-shim"
+OUR_SHIM=1
+if [ -e "$BIN_DIR/ut-todo" ] || [ -L "$BIN_DIR/ut-todo" ]; then
+  if ! grep -q "$MARKER" "$BIN_DIR/ut-todo" 2>/dev/null && ! grep -Eq '/app/release-[^/"]+/bin/ut-todo' "$BIN_DIR/ut-todo" 2>/dev/null; then
+    OUR_SHIM=0
+    say "$BIN_DIR/ut-todo already exists and was not written by this installer; left alone."
+  fi
+fi
+if [ "$OUR_SHIM" = 1 ]; then
 cat > "$BIN_DIR/ut-todo.tmp.$$" <<WRAP
 #!/bin/sh
+$MARKER
 exec "$NODE_BIN" "$REL/bin/ut-todo" "\$@"
 WRAP
 chmod 755 "$BIN_DIR/ut-todo.tmp.$$"; mv -f "$BIN_DIR/ut-todo.tmp.$$" "$BIN_DIR/ut-todo"
+fi
 
 # Only the release the wrapper points at is kept; older release folders are removed.
 for d in "$APP"/release-*; do
@@ -113,8 +125,11 @@ for d in "$APP"/release-*; do
 done
 
 # Finish with the tool's own health command; a failed check fails the install.
-got=$("$BIN_DIR/ut-todo" --help 2>&1 </dev/null) || die "the installed ut-todo does not run: $got"
-say "UltraPlan $VERSION installed ($BIN_DIR/ut-todo)."
+if [ "$OUR_SHIM" = 1 ]; then CMD="$BIN_DIR/ut-todo"; else CMD="$NODE_BIN $REL/bin/ut-todo"; fi
+# shellcheck disable=SC2086
+got=$($CMD --help 2>&1 </dev/null) || die "the installed ut-todo does not run: $got"
+if [ "$OUR_SHIM" = 1 ]; then say "UltraPlan $VERSION installed ($BIN_DIR/ut-todo)."
+else say "UltraPlan $VERSION installed; run it with: $NODE_BIN $REL/bin/ut-todo"; fi
 say "$got"
 case ":$PATH:" in *":$BIN_DIR:"*) ;; *) say "Add $BIN_DIR to your PATH:  export PATH=\"$BIN_DIR:\$PATH\"" ;; esac
 say "Next: ut-todo init 'Inspect:read code' 'Build:ship'"
