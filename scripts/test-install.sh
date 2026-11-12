@@ -124,7 +124,7 @@ grep -q 'checksum mismatch' /tmp/lin4.log || { cat /tmp/lin4.log >&2; echo "FAIL
 [ ! -e /root/.up3/app ] && [ ! -e /root/.local/bin3/ut-todo ] || { echo "FAIL - linux: corrupted install left files behind" >&2; exit 1; }
 echo 'ok - linux: corrupted archive refused with checksum error, nothing installed'
 mkdir -p /tmp/emptybin
-if PATH=/tmp/emptybin sh /scripts/install.sh > /tmp/lin5.log 2>&1; then
+if PATH=/tmp/emptybin /bin/sh /scripts/install.sh > /tmp/lin5.log 2>&1; then
   echo "FAIL - linux: missing prerequisite was not detected" >&2; exit 1
 fi
 grep -q 'needs curl or wget' /tmp/lin5.log || { cat /tmp/lin5.log >&2; echo "FAIL - linux: prerequisite error does not name the cause" >&2; exit 1; }
