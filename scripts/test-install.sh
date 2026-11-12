@@ -55,7 +55,7 @@ if [ "$(uname -s)" = Darwin ]; then
   grep -q 'UltraPlan .* installed' "$ROOT/mac1.log" || fail "macOS install did not report success"
   "$h1/.local/bin/ut-todo" --help | grep -q 'ut-todo' || fail "installed ut-todo --help (macOS)"
   mkdir -p "$ROOT/work"
-  ( cd "$ROOT/work" && "$h1/.local/bin/ut-todo" init 'Inspect:read code' 'Build:ship' ) | grep -q 'Overall: 0/3 done.' \
+  ( cd "$ROOT/work" && "$h1/.local/bin/ut-todo" init 'Inspect:read code' 'Build:ship' ) | grep -q 'Overall: 0/2 done.' \
     || fail "installed ut-todo init (macOS)"
   pass "macOS: fresh install, ut-todo --help and init work"
 
