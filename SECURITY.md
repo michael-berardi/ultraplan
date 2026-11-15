@@ -20,7 +20,10 @@ the release notes if they want to be.
 
 ## Scope
 
-UltraPlan reads and writes plain JSON and Markdown files under the
-project's `.steak-pi/todo/` directory and never touches the network.
-Relevant reports include writes outside that directory, unsafe handling of a
-crafted store file, and command-line parsing that could execute input.
+The CLI stores plain JSON and Markdown under the project's `.steak-pi/todo/`
+directory and makes no network calls. Automatic session detection also reads
+local agent transcripts. Release installers download archives and checksums,
+and may download Node.js.
+Relevant reports include unintended writes outside the store, unsafe handling
+of a crafted store file or release archive, and command-line parsing that
+could execute input.

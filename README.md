@@ -1,68 +1,62 @@
-<div align="center">
+# UltraPlan
 
-# 📋 UltraPlan
+Phased task tracking for coding agents and people reviewing their work.
+`ut-todo` keeps progress in local JSON and Markdown, outside the agent's
+context window. Tasks advance only when you record a change.
 
-### The plan the agent keeps, and you can read.
+The CLI needs Node.js 22.19+ and has no runtime dependencies or build step.
+The optional Pi UI uses peer dependencies supplied by its host.
 
-**Phases in order. One active task. Blocked means blocked. One store, every
-agent. No orchestration theatre.**
+## Install
 
-*Phased todo tracking that survives compaction, resume, and a change of agent —
-local files, no network, no status meetings.*
+Download and extract this repository's source archive from GitHub, or clone
+it. From the extracted repository directory, with Node.js 22.19+ installed:
 
-[![Latest release](https://img.shields.io/github/v/release/your-github-username/ultraplan?label=release)](https://github.com/your-github-username/ultraplan/releases/latest) [![MIT License](https://img.shields.io/github/license/your-github-username/ultraplan)](LICENSE) ![Node.js 22.19+](https://img.shields.io/badge/node-22.19%2B-339933) ![Zero runtime dependencies](https://img.shields.io/badge/runtime%20deps-0-brightgreen)
+```sh
+npm install --global .
+ut-todo --help
+```
 
-[Install](#install) · [30-second demo](#a-30-second-demo) · [Per-agent setup](#per-agent-setup) · [File format](#file-format-and-where-it-lives) · [FAQ](#faq)
+Use an npm prefix you can write to. npm links this directory, so keep it
+in place while installed. To try it without installing, run
+`node bin/ut-todo --help` from the repository directory.
 
-</div>
+### Release installers
 
----
+The release assets include `install.sh` (macOS/Linux) and `install.ps1`
+(Windows PowerShell 5.1 or 7). Download the appropriate installer from this
+repository's Releases page, inspect it, then run `sh install.sh` or
+`powershell -NoProfile -File .\install.ps1` from its download directory.
+These installers download the release archive and check its SHA-256. They
+use an existing Node.js 22.19+ or download Node into the tool's folder.
 
-UltraPlan is the task tracker for agents that work for a living: a phased
-list the model is required to maintain — one active task, recorded starts and
-finishes, blocked items with reasons — stored as plain JSON and Markdown in
-your project. It was extracted, unchanged, from [Steak
-Pi](https://github.com/your-github-username/steak-pi)'s todo feature, and Steak Pi
-ships the same state machine as its native `todo` tool. Same store, same
-rules, whether the worker is a Pi session or anything else that can run a
-shell command.
+The shell installer creates a command wrapper in the user's local bin
+folder. If that folder is not on PATH, follow the printed instruction;
+it does not edit shell profiles. The Windows installer adds its bin folder
+to the user Path; open a new shell afterward. Existing commands not owned
+by the installer are left alone.
 
-Nothing is marked automatically. Tool activity never advances the list by
-itself; the agent has to record what it did. That is the feature.
+Run the same installer again to update. To uninstall, delete the tool's
+install folder and its command wrapper; on Windows also remove the bin
+folder from the user Path. For npm installs, use `npm uninstall --global ultraplan`.
+See [the shell installer](scripts/install.sh) and
+[PowerShell installer](scripts/install.ps1) for install-location overrides.
 
-## A 30-second demo
+## First plan
 
-Real output, captured from `ut-todo` in a scratch directory:
+Run these commands from your project directory:
 
-```console
-$ ut-todo init 'Inspect:read code,map callers' 'Build:edit,test'
-1. Inspect (0/2)
-   [>] read code
-   [ ] map callers
-2. Build (0/2)
-   [ ] edit
-   [ ] test
-Overall: 0/4 done.
+```sh
+ut-todo init 'Inspect:read code,map callers' 'Build:edit,test'
+ut-todo done read
+ut-todo block test --reason 'flaky upstream'
+ut-todo json '{"op":"done","items":["map callers","edit"]}'
+ut-todo view
+```
 
-$ ut-todo done 'read'                # unique prefix; no tab-completion theatrics
-1. Inspect (1/2)
-   [x] read code
-   [>] map callers
-2. Build (0/2)
-   [ ] edit
-   [ ] test
-Overall: 1/4 done.
+The final checklist is:
 
-$ ut-todo block test --reason 'flaky upstream'
-1. Inspect (1/2)
-   [x] read code
-   [>] map callers
-2. Build (0/2)
-   [ ] edit
-   [!] test — flaky upstream
-Overall: 1/4 done.
-
-$ ut-todo json '{"op":"done","items":["map callers","edit"]}'
+```text
 1. Inspect (2/2)
    [x] read code
    [x] map callers
@@ -72,153 +66,57 @@ $ ut-todo json '{"op":"done","items":["map callers","edit"]}'
 Overall: 3/4 done.
 ```
 
-`view` prints that checklist, plain text, every time — so the agent can paste
-it into its reasoning, and you can read it over its shoulder. In Steak Pi the
-same plan is also pinned natively above the composer.
+## Commands and rules
 
-## Install
+- `init 'Phase:task,task' ...` creates an ordered plan. Repeating the identical
+  list preserves progress; a different list replaces it and resets progress.
+- `start TASK` makes one task active. `start TASK TASK ...` deliberately keeps
+  multiple tasks active. When none is active, the earliest pending task is
+  promoted, skipping blocked tasks. Phase ordering is not an execution barrier.
+- `done TASK`, `block TASK --reason TEXT`, and `unblock TASK` record transitions.
+  Exact task names or unique prefixes work. Blocked tasks never auto-promote.
+- `append PHASE TASK ...` adds tasks. `drop TASK` and `rm TASK` remove tasks.
+- Bulk transitions apply all or nothing: an invalid target leaves state unchanged.
+- `view` prints the checklist. `json '{"op":"view"}'` accepts native operations;
+  see [the core API](src/core.ts) for the operation types, including phase selectors.
+- Use `--session NAME` or `UT_TODO_SESSION` for a separate named plan.
+  `ut-todo --help` lists command syntax.
 
-One step on macOS and Linux:
+Edits, tool calls and tests never mark tasks done. Record changes explicitly,
+then reconcile unfinished and blocked tasks before reporting completion.
 
-```sh
-curl -fsSL https://github.com/your-github-username/ultraplan/releases/latest/download/install.sh | sh
+## Agent integrations
+
+- **Claude Code:** load `integrations/claude-code/` with `claude --plugin-dir`.
+  The plugin supplies a planning skill and a CLI wrapper.
+- **Codex, Gemini CLI, OpenCode, Cursor:** copy the
+  [AGENTS.md snippet](integrations/agents-md.md) into your project and put
+  `ut-todo` on PATH.
+- **Pi:** [the extension](pi/extension.ts) provides the native `todo` tool and
+  pinned panel. Its state machine, renderer and extension were extracted from
+  the original host; the shared store format is retained for compatibility.
+- Other agents can use the CLI through a shell.
+
+## Storage and privacy
+
+```text
+<project>/.steak-pi/todo/<sha256(JSON.stringify([sessionFile, sessionId]))>/
+├── todo.json
+└── TODO.md
 ```
 
-One step on Windows (PowerShell 5.1 or 7):
+JSON contains phases and items with `content`, `status`, and optional `reason`.
+Statuses are `pending`, `in_progress`, `done`, and `blocked`. Markdown is the
+readable checklist and is written before JSON.
 
-```powershell
-irm https://github.com/your-github-username/ultraplan/releases/latest/download/install.ps1 | iex
-```
+Explicit session names take precedence. Otherwise the CLI uses Claude Code's
+session when its ID and unique transcript are available, or a stable per-directory
+plan. An indicated Claude session with no unique transcript fails rather than
+silently selecting another plan. Separate agents share a list only when they
+resolve to the same project and owner. Stored files survive context compaction.
 
-Replace `your-github-username` with this repository's GitHub owner, shown in
-the address bar. The installer downloads the release archive, verifies its
-SHA-256 before anything is installed, and puts `ut-todo` on your PATH. It
-installs under `~/.ultraplan` (Windows: `%LOCALAPPDATA%\UltraPlan`) and links
-the command into `~/.local/bin` (Windows: a `bin` folder added to your user
-Path). It uses the Node.js 22.19+ already on your machine, or fetches the
-official Node into UltraPlan's own folder; nothing is installed globally, no
-admin rights needed, no shell profiles edited. There are no runtime
-dependencies and no build step: the CLI runs its TypeScript sources directly
-with Node's built-in type stripping.
-
-To update, run the same one-liner again; it upgrades in place. To remove,
-delete the install folder and the `ut-todo` shim in the bin folder (on Windows
-also remove that bin folder from your user Path).
-
-### Manual install
-
-Requires Node.js 22.19 or newer.
-
-```sh
-npm install --global github:your-github-username/ultraplan#v0.4.2
-ut-todo --help
-```
-
-Or run it from a clone:
-
-```sh
-git clone https://github.com/your-github-username/ultraplan
-alias ut-todo="node $PWD/ultraplan/bin/ut-todo"
-ut-todo --help
-```
-
-Replace `your-github-username` with this repository's GitHub owner, shown in
-the address bar.
-
-## Per-agent setup
-
-The integrations below ship in this package. Any other agent that can run a
-shell command uses the CLI directly.
-
-**Pi / Steak Pi — native tool (the original).** Steak Pi registers the `todo`
-tool natively, with the plan pinned above the composer and maintenance guidance
-injected while work is unfinished. Nothing to configure; Steak Pi's wrapper
-imports this package's sources directly.
-
-**Claude Code — plugin.** Point Claude Code at
-`integrations/claude-code/` (for example `claude --plugin-dir
-/path/to/ultraplan/integrations/claude-code`): a plugin with a `ut-todo`
-skill (when to plan, how to record honestly), a plugin manifest, and a bin link
-to the CLI. Inside UltraTerm, sessions also get the live owner binding — the
-same per-session store the UltraTerm adapter uses.
-
-**Codex, Gemini CLI, OpenCode, Cursor, and any AGENTS.md reader.** Copy the
-snippet from [`integrations/agents-md.md`](./integrations/agents-md.md) into
-your `AGENTS.md` and put `ut-todo` on PATH. The snippet is the whole
-integration; the CLI does the rest.
-
-**Anything else with a shell.** `ut-todo init …`, `ut-todo done …`,
-`ut-todo view`. If it can type, it can keep a plan.
-
-## Rules the agent follows
-
-- **Plan first.** `init` takes phases in execution order. Re-running `init`
-  with the identical list is idempotent — recorded progress, including finished
-  counts, survives. A *different* list replaces the plan and resets progress.
-- **One active task.** The earliest pending item auto-promotes; `start`
-  overrides deliberately. A single `start` activates exactly one task; a bulk
-  `start` keeps every named task active.
-- **Record state changes as they happen.** `start` before beginning, `done`
-  only after verifying the result yourself, `block --reason` when stuck.
-  Edits, tool calls, and passing tests mark nothing by themselves.
-- **Atomic bulk transitions.** `done a b` applies all or nothing; a rejected
-  batch leaves the list untouched. Tasks and phases are never confused — a task
-  named like a phase is the task.
-- **Reconcile before finishing.** One final `view`, and unfinished or blocked
-  items get reported as unfinished or blocked.
-- **One update per real state change.** No re-viewing, no re-marking, no
-  ceremony.
-
-## File format and where it lives
-
-Per project directory:
-
-```
-<cwd>/.steak-pi/todo/<sha256(JSON.stringify([sessionFile, sessionId]))>/
-├── todo.json   # the state: phases → items → {content, status, reason?}
-└── TODO.md     # the same checklist, human-readable, written first
-```
-
-Statuses: `pending`, `in_progress`, `done`, `blocked`. The hash pins ownership:
-each Steak Pi or Claude Code session gets its own list (survives compaction and
-resume; `/clear` starts a fresh one). The CLI resolves the same way — explicit
-`--session NAME` or `UT_TODO_SESSION` first, Claude Code's session when
-detectable, otherwise a stable per-cwd default. Same directory, same format as
-Steak Pi, so agents and humans read one store.
-
-## Privacy
-
-Local files under your project, read and written by your machine. No network
-calls, no telemetry, no accounts, no sync. If you want your plan exfiltrated,
-you will have to do it yourself.
-
-## FAQ
-
-**Why phases instead of a flat checklist?**
-Because "which of these forty checkboxes matters now" is a question you want
-answered by the list, not negotiated with the model every morning. Phases run
-in order; one item is active; the rest wait their turn.
-
-**The agent claimed it was done but the list says otherwise. Who wins?**
-The list. That is the point.
-
-**Does it integrate with Jira?**
-No. It integrates with a shell, which Jira unfortunately also requires.
-
-**What happens to my plan when the context window is compacted?**
-Nothing. The plan never lived in the context window; it lived in
-`.steak-pi/todo/`. That is the "survives compaction and resume" promise, and it
-is the entire reason the store exists.
-
-**Why `.steak-pi`?**
-Because it started life as Steak Pi's todo feature and renaming the directory
-would orphan every existing plan. Names are load-bearing.
-
-## License
-
-[MIT](./LICENSE) © 2026 Pareto Cybernetics. Extracted from
-[Steak Pi](https://github.com/your-github-username/steak-pi), which ships the same
-core as its native todo tool.
+The CLI makes no network calls. Installers and dependency installation do.
+Plans are plain files, not encrypted; keep sensitive content out of committed state.
 
 ## Development
 
@@ -228,8 +126,5 @@ npm run typecheck
 npm test
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
-
----
-
-Part of [Pareto Cybernetics](https://paretocybernetics.com/projects/ultraplan/): free, private, open-source tools for working with AI agents.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md),
+[CHANGELOG.md](CHANGELOG.md), and the [MIT license](LICENSE).
