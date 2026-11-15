@@ -50,10 +50,17 @@ function privateTerms(file = process.env.OSS_PRIVATE_TERMS ?? path.join(homedir(
     });
 }
 
-// Documented exceptions: [file, text the line contains, why it may stay].
-// Empty today: the CHANGELOG's history reads the same with the neutral
-// `your-github-username` placeholder, so no entry needs the original handle.
-const ALLOWED: ReadonlyArray<readonly [file: string, contains: string, reason: string]> = [];
+// Only public repository coordinates are exempt, never a whole line or person.
+// Badge URLs use the same repository coordinates but a different host.
+const PUBLIC_REPOS = "ultraplan|steak-pi|carl|carapace|champollion|codex-on-claude-code|concept|goodnight|openmail|overseer-browser|paretobench|retex|rusty-mirror|skribi|smart-build|steak-dsh|TrimReaper|ultra-media-remote|ultracompress|ultralink|ultraterm-computer-use|ultraterm-protocol|ultraterm-subagent-protocol|ultravox";
+const PUBLIC_COORDINATES = new RegExp(
+  `(?<![\\w./@-])(?:https://github\\.com/|github:|https://img\\.shields\\.io/github/(?:v/release|license)/)michael-berardi/(?:${PUBLIC_REPOS})(?=\\.git(?:$|[\\s/#?"')\\]])|$|[\\s/#?"')\\]])`,
+  "g",
+);
+
+function withoutPublicCoordinates(text: string): string {
+  return text.replace(PUBLIC_COORDINATES, "public-repository");
+}
 
 function walk(dir: string): string[] {
   return readdirSync(dir)
@@ -86,7 +93,7 @@ function personalTexts(): Array<[string, string]> {
 function hits(pattern: RegExp, texts = shipped()): string[] {
   return texts.flatMap(([file, text]) =>
     text.split("\n").flatMap((line, i) =>
-      pattern.test(line) && !ALLOWED.some(([f, contains]) => f === file && line.includes(contains))
+      pattern.test(withoutPublicCoordinates(line))
         ? [`${file}:${i + 1}: ${line.trim().slice(0, 120)}`]
         : [],
     ),
@@ -122,9 +129,28 @@ describe("neutrality", () => {
     for (const sample of ["provider-a/model-name", "claude --plugin-dir", "Gemini CLI", "OpenCode", ".steak-pi/todo/"]) {
       expect(sample).not.toMatch(MODEL_CHOICE);
     }
-    for (const sample of ["https://github.com/your-github-username/ultraplan", "Alex", "Steak Pi", "UltraTerm"]) {
+    for (const sample of ["Alex", "Steak Pi", "UltraTerm"]) {
       expect(sample).not.toMatch(PERSONAL);
     }
+  });
+
+  it("allows exact public repository coordinates without hiding personal text", () => {
+    for (const sample of [
+      "https://github.com/michael-berardi/ultraplan/releases/latest",
+      "https://github.com/michael-berardi/steak-pi",
+      "github:michael-berardi/ultraplan#v0.4.2",
+      "https://github.com/michael-berardi/ultraplan.git",
+      "https://img.shields.io/github/license/michael-berardi/ultraplan",
+    ]) expect(hits(PERSONAL, [["probe", sample]])).toEqual([]);
+    for (const sample of [
+      "Michael Berardi", "/Users/someone/dev", "https://github.com/michael-berardi",
+      "https://github.com/michael-berardi/unrelated",
+      "https://github.com/michael-berardi/ultraplan-private",
+      "https://github.com/michael-berardi/ultraplan.evil",
+      "https://evil.example/https://github.com/michael-berardi/ultraplan",
+      "https://github.com/michael-berardi/ultraplan Michael",
+      "https://github.com/michael-berardi/ultraplan/Michael",
+    ]) expect(hits(PERSONAL, [["probe", sample]])).toHaveLength(1);
   });
 
   it("ships no concrete model id or provider preference", () => {

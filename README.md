@@ -1,5 +1,7 @@
 # UltraPlan
 
+[![Latest release](https://img.shields.io/github/v/release/michael-berardi/ultraplan?label=release)](https://github.com/michael-berardi/ultraplan/releases/latest) [![MIT License](https://img.shields.io/github/license/michael-berardi/ultraplan)](LICENSE)
+
 Phased task tracking for coding agents and people reviewing their work.
 `ut-todo` keeps progress in local JSON and Markdown, outside the agent's
 context window. Tasks advance only when you record a change.
@@ -9,10 +11,33 @@ The optional Pi UI uses peer dependencies supplied by its host.
 
 ## Install
 
-Download and extract this repository's source archive from GitHub, or clone
-it. From the extracted repository directory, with Node.js 22.19+ installed:
+macOS / Linux:
 
 ```sh
+curl -fsSL https://github.com/michael-berardi/ultraplan/releases/latest/download/install.sh | sh
+```
+
+Windows (PowerShell 5.1 or 7):
+
+```powershell
+irm https://github.com/michael-berardi/ultraplan/releases/latest/download/install.ps1 | iex
+```
+
+The installers download the release archive and check its SHA-256. They
+use an existing Node.js 22.19+ or download Node into the tool's folder.
+To inspect before running, download the script and read it first.
+
+With Node.js 22.19+ already installed, you can instead use npm:
+
+```sh
+npm install --global github:michael-berardi/ultraplan#v0.4.2
+```
+
+### From source
+
+```sh
+git clone https://github.com/michael-berardi/ultraplan.git
+cd ultraplan
 npm install --global .
 ut-todo --help
 ```
@@ -21,14 +46,7 @@ Use an npm prefix you can write to. npm links this directory, so keep it
 in place while installed. To try it without installing, run
 `node bin/ut-todo --help` from the repository directory.
 
-### Release installers
-
-The release assets include `install.sh` (macOS/Linux) and `install.ps1`
-(Windows PowerShell 5.1 or 7). Download the appropriate installer from this
-repository's Releases page, inspect it, then run `sh install.sh` or
-`powershell -NoProfile -File .\install.ps1` from its download directory.
-These installers download the release archive and check its SHA-256. They
-use an existing Node.js 22.19+ or download Node into the tool's folder.
+### Updates and uninstalling
 
 The shell installer creates a command wrapper in the user's local bin
 folder. If that folder is not on PATH, follow the printed instruction;
@@ -128,3 +146,7 @@ npm test
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md),
 [CHANGELOG.md](CHANGELOG.md), and the [MIT license](LICENSE).
+
+---
+
+Part of [Pareto Cybernetics](https://paretocybernetics.com/projects/ultraplan/): free, private, open-source tools for working with AI agents.
