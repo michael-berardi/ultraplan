@@ -17,6 +17,7 @@
  *   ut-todo append PHASE TASK [TASK ...]
  *   ut-todo view
  *   ut-todo json '{"op":"done","items":["a","b"]}'   # any native op, verbatim
+ *   ut-todo --version | ut-todo version
  */
 import { createHash, randomUUID } from "node:crypto";
 import { promises as fs, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
@@ -41,6 +42,11 @@ function exitFlushed(code) {
   return new Promise(() => process.stdout.write("", () => process.stderr.write("", () => process.exit(code))));
 }
 if (ARGS[0] === "update") await exitFlushed(await updates.updateCommand(ARGS.slice(1)));
+// The version comes from the package.json shipped beside this file (updates.CURRENT); no check, no store.
+if (ARGS[0] === "--version" || ARGS[0] === "version") {
+  process.stdout.write(`ut-todo ${updates.CURRENT}\n`);
+  await exitFlushed(0);
+}
 const quiet = !ARGS.length || ARGS[0] === "-h" || ARGS[0] === "--help" || ARGS.includes("json");
 const pendingNotice = quiet || (!process.features.typescript && process.env.UT_TODO_INNER !== "1")
   ? undefined
@@ -72,6 +78,7 @@ const USAGE = `ut-todo — durable phased task progress for any agent with a she
   ut-todo json '{"op":"view"}'          # any native tool op, verbatim
   ut-todo --session NAME ...            # separate list for a named session
   ut-todo update [--check|--skip]       # newer release; see ut-todo update --help
+  ut-todo --version                     # print the installed version (also: ut-todo version)
 
 One store per project directory, shared with Steak Pi's native todo tool:
 <cwd>/.steak-pi/todo/<hash>/{todo.json,TODO.md}. Plans stay in local files; on a

@@ -26,6 +26,8 @@ export const DAY_MS = 24 * 60 * 60 * 1000;
 export const CHECK_TIMEOUT_MS = 4000;
 export const MAX_LOG_BYTES = 256 * 1024;
 export const ROLLBACK_MAX_AGE_MS = 7 * DAY_MS;
+/** An in-flight claim older than the check timeout plus slack belongs to a process that died. */
+export const CLAIM_STALE_MS = CHECK_TIMEOUT_MS + 10_000;
 const USER_AGENT = "ut-todo-update-check";
 const LOCK_STALE_MS = 10 * 60 * 1000;
 const PACKAGE_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -74,6 +76,8 @@ export function cacheDir(env = process.env) {
 
 export const statePath = (env = process.env) => path.join(cacheDir(env), "update.json");
 export const logPath = (env = process.env) => path.join(cacheDir(env), "update.log");
+/** Exists only while one daily check is in flight; see claimCheck. */
+export const claimPath = (env = process.env) => path.join(cacheDir(env), "update.claim");
 
 const DEFAULTS = Object.freeze({
   checkedAt: 0, latest: undefined, error: undefined, skip: undefined, shown: undefined, shownAt: 0,
@@ -198,8 +202,41 @@ export function dueNotice(state, current = CURRENT, now = Date.now()) {
 }
 
 /**
+ * One daily check in flight per cache folder: commands started together reuse
+ * it instead of each sending a request. Creates the 0600 claim file exclusively
+ * and returns its token, or undefined while another fresh claim exists. A
+ * claim older than CLAIM_STALE_MS (by the file's own clock) is taken over once.
+ */
+function claimCheck(env) {
+  const file = claimPath(env);
+  mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const token = randomBytes(8).toString("hex");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      writeFileSync(file, `${token}\n`, { flag: "wx", mode: 0o600 });
+      return token;
+    } catch (error) {
+      if (error?.code !== "EEXIST" || attempt > 0) return undefined;
+      let age = 0;
+      try { age = Date.now() - statSync(file).mtimeMs; } catch { continue; } // released meanwhile
+      if (Math.abs(age) < CLAIM_STALE_MS) return undefined;
+      rmSync(file, { force: true });
+    }
+  }
+  return undefined;
+}
+
+/** Remove the claim only if it is still ours (a stale takeover may have replaced it). */
+function releaseClaim(env, token) {
+  try {
+    if (readFileSync(claimPath(env), "utf8").trim() === token) rmSync(claimPath(env), { force: true });
+  } catch {}
+}
+
+/**
  * The daily check behind the notice, started alongside the command. Resolves
  * to { version, state } when a notice is due; never rejects and never prints.
+ * While another command's check is in flight it uses the cached result instead.
  */
 export async function passiveCheck({
   env = process.env, streams = process, fetchImpl, now = Date.now(), current = CURRENT,
@@ -208,7 +245,19 @@ export async function passiveCheck({
     let state = readState(statePath(env));
     if (quietReason(env, streams, state)) return undefined;
     const fresh = state.checkedAt <= now && now - state.checkedAt < DAY_MS;
-    if (!fresh) state = (await refresh({ env, fetchImpl, now })).state;
+    if (!fresh) {
+      const token = claimCheck(env);
+      if (token) {
+        const release = () => releaseClaim(env, token);
+        process.once("exit", release); // a command that fails mid-check leaves no claim behind
+        try {
+          state = (await refresh({ env, fetchImpl, now })).state;
+        } finally {
+          process.off("exit", release);
+          release();
+        }
+      }
+    }
     const version = dueNotice(state, current, now);
     return version ? { version, state } : undefined;
   } catch {

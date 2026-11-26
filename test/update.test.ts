@@ -1,7 +1,8 @@
 import { execFile, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync,
+  copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync,
+  writeFileSync,
 } from "node:fs";
 import * as http from "node:http";
 import * as os from "node:os";
@@ -11,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  afterCommand, appendLog, CURRENT, DAY_MS, detectInstall, dueNotice, fetchLatest, isNewer, MAX_LOG_BYTES,
+  afterCommand, appendLog, CLAIM_STALE_MS, claimPath, CURRENT, DAY_MS, detectInstall, dueNotice, fetchLatest, isNewer, MAX_LOG_BYTES,
   noticeLines, npmCommand, parseVersion, passiveCheck, pruneRollback, readState,
   statePath, logPath, updateCommand, updateState,
 } from "../src/update.js";
@@ -183,6 +184,45 @@ describe("daily check", () => {
     })) as unknown as typeof fetch;
     expect((await fetchLatest({ url: "http://127.0.0.1:9/api", fetchImpl: hanging, timeoutMs: 20 })).error)
       .toMatch(/^timed out after/);
+  });
+
+  it("commands started together share one in-flight check; its claim is gone afterwards", async () => {
+    const root = tempDir();
+    const env = baseEnv(root);
+    let calls = 0;
+    let answer!: () => void;
+    const gate = new Promise<void>((resolve) => { answer = resolve; });
+    const slow = (async () => { calls++; await gate; return json({ tag_name: "v9.9.9" }); }) as typeof fetch;
+    const listeners = process.listenerCount("exit");
+    const first = passiveCheck({ env, streams: TTY, fetchImpl: slow });
+    expect(existsSync(claimPath(env))).toBe(true);
+    expect(statSync(claimPath(env)).mode & 0o777).toBe(0o600);
+    expect(process.listenerCount("exit")).toBe(listeners + 1); // a failing command still removes the claim
+    const others = await Promise.all([1, 2, 3].map(() => passiveCheck({ env, streams: TTY, fetchImpl: slow })));
+    expect(others).toEqual([undefined, undefined, undefined]); // nothing cached yet, and no second request
+    answer();
+    expect((await first)?.version).toBe("9.9.9");
+    expect(calls).toBe(1);
+    expect(existsSync(claimPath(env))).toBe(false);
+    expect(process.listenerCount("exit")).toBe(listeners);
+    expect(readdirSync(path.join(root, "cache"))).toEqual(["update.json"]);
+  });
+
+  it("leaves a live claim alone and takes over one left by a process that died", async () => {
+    const root = tempDir();
+    const env = baseEnv(root);
+    let calls = 0;
+    const newer = (async () => { calls++; return json({ tag_name: "v9.9.9" }); }) as typeof fetch;
+    mkdirSync(path.dirname(claimPath(env)), { recursive: true });
+    writeFileSync(claimPath(env), "another-process\n");
+    expect(await passiveCheck({ env, streams: TTY, fetchImpl: newer })).toBeUndefined();
+    expect(calls).toBe(0);
+    expect(readFileSync(claimPath(env), "utf8")).toBe("another-process\n"); // not ours to remove
+    const old = (Date.now() - CLAIM_STALE_MS - 1000) / 1000;
+    utimesSync(claimPath(env), old, old);
+    expect((await passiveCheck({ env, streams: TTY, fetchImpl: newer }))?.version).toBe("9.9.9");
+    expect(calls).toBe(1);
+    expect(existsSync(claimPath(env))).toBe(false);
   });
 
   it("is one anonymous GET with a fixed User-Agent; drafts, prereleases and odd tags are not releases", async () => {

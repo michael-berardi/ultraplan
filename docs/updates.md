@@ -65,6 +65,10 @@ It sends no identifier, version, usage or machine data. It runs at most once
 every 24 hours, in the background, with a 4-second timeout. A failed check is
 recorded with its cause (`ut-todo update --check` shows it) and is not retried
 until the next day. Drafts, prereleases and tags that are not `x.y.z` are ignored.
+Commands started at the same time share one check: the first one marks it in
+flight with an owner-only `update.claim` file, the others use the cached result
+instead of sending their own request, and the file is removed when the check
+ends. A claim left by a process that died is replaced after 14 seconds.
 
 It is off when output is not a terminal, when `CI` is set, in agent shells, with
 `ut-todo update --auto-check off`, or with `UT_TODO_NO_UPDATE_CHECK=1`.
@@ -73,7 +77,8 @@ All update state lives in one folder: `~/Library/Caches/ultraplan` (macOS),
 `$XDG_CACHE_HOME/ultraplan` or `~/.cache/ultraplan` (Linux),
 `%LOCALAPPDATA%\UltraPlan\cache` (Windows). It holds `update.json` (mode 0600:
 check time, latest version, skipped version, last notice, your settings) and,
-only after an automatic install, `update.log` (kept under 256 KB). Downloads go
+only after an automatic install, `update.log` (kept under 256 KB); `update.claim`
+exists only while a check is running. Downloads go
 to a temporary folder that is deleted on success and on failure. To uninstall
 completely, delete that folder along with the install folder and wrapper.
 

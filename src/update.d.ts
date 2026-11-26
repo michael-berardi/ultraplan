@@ -8,6 +8,7 @@ export const DAY_MS: number;
 export const CHECK_TIMEOUT_MS: number;
 export const MAX_LOG_BYTES: number;
 export const ROLLBACK_MAX_AGE_MS: number;
+export const CLAIM_STALE_MS: number;
 export const CURRENT: string;
 export const UPDATE_USAGE: string;
 
@@ -36,6 +37,7 @@ export function isNewer(candidate: unknown, current: unknown): boolean;
 export function cacheDir(env?: Env): string;
 export function statePath(env?: Env): string;
 export function logPath(env?: Env): string;
+export function claimPath(env?: Env): string;
 export function readState(file: string): UpdateState;
 export function writeState(file: string, state: Partial<UpdateState>): Partial<UpdateState>;
 export function updateState(file: string, patch: Partial<UpdateState>): UpdateState;

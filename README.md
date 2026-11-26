@@ -30,7 +30,7 @@ To inspect before running, download the script and read it first.
 With Node.js 22.19+ already installed, you can instead use npm:
 
 ```sh
-npm install --global github:michael-berardi/ultraplan#v0.5.1
+npm install --global github:michael-berardi/ultraplan#v0.5.2
 ```
 
 ### Updates
@@ -104,7 +104,7 @@ Overall: 3/4 done.
 - `view` prints the checklist. `json '{"op":"view"}'` accepts native operations;
   see [the core API](src/core.ts) for the operation types, including phase selectors.
 - Use `--session NAME` or `UT_TODO_SESSION` for a separate named plan.
-  `ut-todo --help` lists command syntax.
+  `ut-todo --help` lists command syntax; `ut-todo --version` prints the installed version.
 
 Edits, tool calls and tests never mark tasks done. Record changes explicitly,
 then reconcile unfinished and blocked tasks before reporting completion.

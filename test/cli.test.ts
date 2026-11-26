@@ -100,6 +100,18 @@ describe("ut-todo cli", () => {
     await expect(utodo(cwd, ["json", "{not json}"])).rejects.toMatchObject({ code: 2 });
     const help = await utodo(cwd, ["--help"]);
     expect(help.stdout).toContain("ut-todo init 'Phase:item one,item two'");
+    expect(help.stdout).toContain("ut-todo --version");
+  });
+
+  it("--version and version print the package.json version, exit 0 and touch no store", async () => {
+    const cwd = await tempDir();
+    const { version } = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
+    for (const args of [["--version"], ["version"]]) {
+      const { stdout, stderr } = await utodo(cwd, args); // execFile rejects on a non-zero exit
+      expect(stdout).toBe(`ut-todo ${version}\n`);
+      expect(stderr).toBe("");
+    }
+    expect(existsSync(path.join(cwd, ".steak-pi"))).toBe(false);
   });
 
   it("a crash-left lock cannot wedge the store (stale locks break free)", async () => {

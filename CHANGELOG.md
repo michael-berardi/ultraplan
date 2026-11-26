@@ -3,6 +3,18 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.2 — 2026-11-26
+
+- `ut-todo --version` and `ut-todo version` print `ut-todo <version>` (read
+  from the installed `package.json`) and exit 0. Before, both failed with
+  `unknown op`. `ut-todo --help` and the README list them.
+- Commands started at the same time now share one daily update check instead
+  of each sending a request. The first one marks the check in flight with a
+  0600 `update.claim` file in the update cache folder; the others use the
+  cached result. The file is removed when the check ends, also when the
+  command fails, and a claim left by a process that died is replaced after
+  14 seconds.
+
 ## 0.5.1 — 2026-11-26
 
 - Privacy: the CLI and Pi extension now create the plan store with 0700

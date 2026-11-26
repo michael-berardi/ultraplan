@@ -19,7 +19,9 @@ model API.
   plan folder name); nothing from them leaves the machine.
 - **Update state.** One folder in the platform cache folder holds
   `update.json` (mode 0600) and, only after an automatic install,
-  `update.log` (kept under 256 KB). Update downloads go to a temporary folder
+  `update.log` (kept under 256 KB). While a check runs, a 0600 `update.claim`
+  file keeps other commands from sending a second request; it is removed when
+  the check ends. Update downloads go to a temporary folder
   that is deleted on success and on failure; the rollback copy is deleted
   after the new version completes one command, or after 7 days. Locations
   and removal: [docs/updates.md](docs/updates.md#privacy-and-files).
