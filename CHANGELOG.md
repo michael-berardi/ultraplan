@@ -8,9 +8,9 @@ All notable changes to UltraPlan are documented here. The project uses
 ### Documentation
 
 - Recorded the contract §4a rollback gap in `docs/updates.md`: `release-previous` and the `.previous` wrapper are retained indefinitely with no first-run or seven-day cleanup and must be removed manually; `update --auto off` disables automatic installs but does not delete the rollback copies. No update behavior changed.
-- The npm installation example now points at the published `v0.5.1` tag instead of the unpublished `v0.5.2` branch version.
+- Confirmed that `v0.5.2` is a published GitHub release and pinned the README's npm example to it. The pending branch changes are numbered `0.5.3`; no README install command points at an unpublished tag.
 
-## 0.5.2 — 2026-11-26
+## 0.5.3 — 2026-11-26
 
 - Automatic release checks no longer run inside the CLI process: a detached,
   unref'd, low-priority child performs the one anonymous GET, so a command
@@ -21,6 +21,19 @@ All notable changes to UltraPlan are documented here. The project uses
   installs now come from the cached result on the next interactive command.
 - Kept opt-in auto-install detached, verified (SHA-256 + rollback) and the
   single install log capped at its newest 256 KB.
+
+## 0.5.2 — 2026-11-26 (published)
+
+Already published as [`v0.5.2`](https://github.com/michael-berardi/ultraplan/releases/tag/v0.5.2).
+That release contains:
+
+- `ut-todo --version` and `ut-todo version` print `ut-todo <version>` from the
+  shipped `package.json` and exit 0; both previously failed with `unknown op`.
+  `--help` and the README list them.
+- Commands started together share one daily update check: the first writes a
+  0600 `update.claim` file in the update cache folder and the rest reuse the
+  cached result. The claim is removed when the check ends, including on a
+  failing command, and a claim left by a dead process is replaced after 14 s.
 
 ## 0.5.1 — 2026-11-26
 

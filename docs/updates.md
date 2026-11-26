@@ -6,6 +6,12 @@ UltraPlan follows the open-source update contract: tell the user when a newer
 stable release exists, make updating one command, and never install anything
 without an explicit opt-in.
 
+At this revision the package version is `0.5.3`, while the newest published
+GitHub release is `v0.5.2`. README install commands use that published release;
+release checks compare against published releases only, never an unpublished
+branch version. The example below shows the next version being offered to a
+user who has `0.5.2` installed.
+
 ## What the check sends
 
 In interactive terminal use, `ut-todo` makes **one anonymous HTTPS GET** to

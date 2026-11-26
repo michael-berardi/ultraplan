@@ -25,12 +25,14 @@ irm https://github.com/michael-berardi/ultraplan/releases/latest/download/instal
 
 The installers download the release archive and check its SHA-256. They
 use an existing Node.js 22.19+ or download Node into the tool's folder.
-To inspect before running, download the script and read it first.
+To inspect before running, download the script and read it first. These links
+use GitHub's `latest` release assets; the npm example below pins the published
+`v0.5.2` tag, not an unpublished development version.
 
 With Node.js 22.19+ already installed, you can instead use npm:
 
 ```sh
-npm install --global github:michael-berardi/ultraplan#v0.5.1
+npm install --global github:michael-berardi/ultraplan#v0.5.2
 ```
 
 ### From source
