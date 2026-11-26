@@ -7,6 +7,8 @@
 # ULTRAPLAN_VERSION (default: latest, e.g. 0.3.0), ULTRAPLAN_RELEASE_BASE (override the download base URL, used by tests).
 # ULTRAPLAN_KEEP_PREVIOUS is set by `ut-todo update`: the release it replaces is kept once for rollback.
 set -eu
+# The installer itself sends no usage data; keep any tool it invokes offline-first too.
+export DO_NOT_TRACK=1
 
 REPO="michael-berardi/ultraplan"
 NODE_MIN_MAJOR=22; NODE_MIN_MINOR=19

@@ -138,7 +138,7 @@ describe("neutrality", () => {
     for (const sample of [
       "https://github.com/michael-berardi/ultraplan/releases/latest",
       "https://github.com/michael-berardi/steak-pi",
-      "github:michael-berardi/ultraplan#v0.5.0",
+      "github:michael-berardi/ultraplan#v0.5.1",
       "https://github.com/michael-berardi/ultraplan.git",
       "https://img.shields.io/github/license/michael-berardi/ultraplan",
     ]) expect(hits(PERSONAL, [["probe", sample]])).toEqual([]);

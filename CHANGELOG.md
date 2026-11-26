@@ -3,8 +3,17 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
-## 0.5.0 — 2026-11-26
+## 0.5.1 — 2026-11-26
 
+- Privacy: the CLI and Pi extension now create the plan store with 0700
+  directories and 0600 files, and tighten stores written by older versions.
+- Both installers set `DO_NOT_TRACK=1` for the processes they start (and
+  restore the caller's value on Windows). The test runner does the same.
+- A privacy test runs the CLI with every network API blocked, checks the store's
+  file modes, fails if telemetry code or endpoints are added, and allows network
+  code only in the update module, which may reach only GitHub.
+- README: a short Privacy section; the detail (what is stored, for how long,
+  what goes over the network) is in `PRIVACY.md`.
 - Update notices. On a terminal, `ut-todo` checks once a day for a newer
   release (one anonymous request to the public GitHub release record) and
   prints a two-line notice on stderr after your command. It stays silent in
@@ -16,8 +25,9 @@ All notable changes to UltraPlan are documented here. The project uses
   --rollback` until the new one has run once (7 days at most). npm global
   installs run npm; source checkouts get the `git pull` command.
 - `ut-todo update --check` (exit 0, 10 or 1), `--skip` and `--auto on|off|status`.
-  Automatic updates are off by default. All update state is one 0600 file in
-  the platform cache folder; see `docs/updates.md` and `PRIVACY.md`.
+  Automatic updates are off by default. Update state is one 0600 file in the
+  platform cache folder, plus a log under 256 KB only after an automatic
+  install; see `docs/updates.md` and `PRIVACY.md`.
 - Installers: `ULTRAPLAN_KEEP_PREVIOUS` (set by `ut-todo update`) keeps the
   replaced release as the single rollback copy.
 

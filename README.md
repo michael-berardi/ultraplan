@@ -30,7 +30,7 @@ To inspect before running, download the script and read it first.
 With Node.js 22.19+ already installed, you can instead use npm:
 
 ```sh
-npm install --global github:michael-berardi/ultraplan#v0.5.0
+npm install --global github:michael-berardi/ultraplan#v0.5.1
 ```
 
 ### Updates
@@ -121,7 +121,7 @@ then reconcile unfinished and blocked tasks before reporting completion.
   the original host; the shared store format is retained for compatibility.
 - Other agents can use the CLI through a shell.
 
-## Storage and privacy
+## Storage
 
 ```text
 <project>/.steak-pi/todo/<sha256(JSON.stringify([sessionFile, sessionId]))>/
@@ -139,10 +139,12 @@ plan. An indicated Claude session with no unique transcript fails rather than
 silently selecting another plan. Separate agents share a list only when they
 resolve to the same project and owner. Stored files survive context compaction.
 
-UltraPlan collects nothing. The CLI's only network use is the daily update
-check on a terminal: one anonymous request to the public release record
-(off with `UT_TODO_NO_UPDATE_CHECK=1`). Plans are plain files, not encrypted;
-keep sensitive content out of committed state. Details: [PRIVACY.md](PRIVACY.md).
+## Privacy
+
+- Network: at most one anonymous update check a day on a terminal (off with `UT_TODO_NO_UPDATE_CHECK=1`), plus installs and updates you start.
+- No telemetry, analytics, accounts or identifiers.
+- Plans stay in `<project>/.steak-pi/todo/` as plain files, owner-only on macOS and Linux; delete that folder to remove them.
+- Details: [PRIVACY.md](PRIVACY.md).
 
 ## Development
 

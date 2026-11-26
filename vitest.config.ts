@@ -1,6 +1,9 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+// No dependency of the test runner gets a usage signal from this suite.
+process.env.DO_NOT_TRACK ??= "1";
+
 // Root is pinned to this package so the suite runs identically from the
 // monorepo root (`vitest run --config packages/ultraplan/vitest.config.ts`)
 // and from inside the extracted standalone repository.
@@ -13,6 +16,7 @@ export default defineConfig({
     env: {
       // Keep unit tests hermetic: no cross-process slot files, default caps.
       STEAK_PI_USAP_MACHINE: "off",
+      DO_NOT_TRACK: "1",
     },
   },
 });
