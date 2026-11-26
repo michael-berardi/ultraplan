@@ -3,6 +3,13 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Documentation
+
+- Recorded the contract §4a rollback gap in `docs/updates.md`: `release-previous` and the `.previous` wrapper are retained indefinitely with no first-run or seven-day cleanup and must be removed manually; `update --auto off` disables automatic installs but does not delete the rollback copies. No update behavior changed.
+- The npm installation example now points at the published `v0.5.1` tag instead of the unpublished `v0.5.2` branch version.
+
 ## 0.5.2 — 2026-11-26
 
 - Automatic release checks no longer run inside the CLI process: a detached,

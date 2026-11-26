@@ -30,7 +30,7 @@ To inspect before running, download the script and read it first.
 With Node.js 22.19+ already installed, you can instead use npm:
 
 ```sh
-npm install --global github:michael-berardi/ultraplan#v0.5.2
+npm install --global github:michael-berardi/ultraplan#v0.5.1
 ```
 
 ### From source

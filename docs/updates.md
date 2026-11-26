@@ -90,6 +90,19 @@ npm-global installs are detected and updated with
 `npm install --global github:<owner>/<repo>#v<version>` rather than by
 overwriting files npm owns. Other install kinds print the matching command.
 
+### Known gap in contract §4a
+
+Contract §4a asks for a rollback copy to be deleted after the new version has
+run successfully once, and at the latest within seven days; it also asks
+`update --auto off` to clear saved auto state. This build does **not** implement
+that cleanup. An installer-managed swap keeps `release-previous` and the
+`.previous` command wrapper **indefinitely**: there is no first-successful-run
+check and no seven-day expiry. Remove those copies manually when you no longer
+need them, or run `ut-todo update --rollback` to restore the previous release
+first. `ut-todo update --auto off` writes `autoInstall: false` to the config
+and stops future automatic installs, but it **does not delete the rollback
+copies** and does not start any timed cleanup.
+
 ## Privacy
 
 Plans remain local, plain JSON and Markdown in 0700/0600 paths. The only
