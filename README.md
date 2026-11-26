@@ -30,8 +30,14 @@ To inspect before running, download the script and read it first.
 With Node.js 22.19+ already installed, you can instead use npm:
 
 ```sh
-npm install --global github:michael-berardi/ultraplan#v0.4.2
+npm install --global github:michael-berardi/ultraplan#v0.5.0
 ```
+
+### Updates
+
+On a terminal, `ut-todo` checks once a day for a newer release and says so
+after your command. `ut-todo update` installs it, verified; automatic updates
+stay off unless you run `ut-todo update --auto on`. See [docs/updates.md](docs/updates.md).
 
 ### From source
 
@@ -46,17 +52,17 @@ Use an npm prefix you can write to. npm links this directory, so keep it
 in place while installed. To try it without installing, run
 `node bin/ut-todo --help` from the repository directory.
 
-### Updates and uninstalling
+### Uninstalling
 
 The shell installer creates a command wrapper in the user's local bin
 folder. If that folder is not on PATH, follow the printed instruction;
 it does not edit shell profiles. The Windows installer adds its bin folder
 to the user Path; open a new shell afterward. Existing commands not owned
-by the installer are left alone.
+by the installer are left alone. Running the installer again also updates.
 
-Run the same installer again to update. To uninstall, delete the tool's
-install folder and its command wrapper; on Windows also remove the bin
-folder from the user Path. For npm installs, use `npm uninstall --global ultraplan`.
+To uninstall, delete the tool's install folder, its command wrapper and its
+[update cache folder](docs/updates.md#privacy-and-files); on Windows also remove
+the bin folder from the user Path. For npm installs, use `npm uninstall --global ultraplan`.
 See [the shell installer](scripts/install.sh) and
 [PowerShell installer](scripts/install.ps1) for install-location overrides.
 
@@ -133,8 +139,10 @@ plan. An indicated Claude session with no unique transcript fails rather than
 silently selecting another plan. Separate agents share a list only when they
 resolve to the same project and owner. Stored files survive context compaction.
 
-The CLI makes no network calls. Installers and dependency installation do.
-Plans are plain files, not encrypted; keep sensitive content out of committed state.
+UltraPlan collects nothing. The CLI's only network use is the daily update
+check on a terminal: one anonymous request to the public release record
+(off with `UT_TODO_NO_UPDATE_CHECK=1`). Plans are plain files, not encrypted;
+keep sensitive content out of committed state. Details: [PRIVACY.md](PRIVACY.md).
 
 ## Development
 

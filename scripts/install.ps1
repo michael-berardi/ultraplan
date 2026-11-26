@@ -4,7 +4,8 @@
 # UltraPlan's own folder (nothing global). Re-running upgrades in place. No admin rights, no profile edits.
 # Runs on Windows PowerShell 5.1 and PowerShell 7; also runs under PowerShell 7 on Linux/macOS for testing, with
 # ULTRAPLAN_HOME / ULTRAPLAN_BIN_DIR overrides (defaults there: ~/.ultraplan and ~/.local/bin).
-# Environment: ULTRAPLAN_HOME, ULTRAPLAN_BIN_DIR, ULTRAPLAN_VERSION (e.g. 0.3.0), ULTRAPLAN_RELEASE_BASE (tests).
+# Environment: ULTRAPLAN_HOME, ULTRAPLAN_BIN_DIR, ULTRAPLAN_VERSION (e.g. 0.3.0), ULTRAPLAN_RELEASE_BASE (tests),
+# ULTRAPLAN_KEEP_PREVIOUS (set by `ut-todo update`: keep that release for rollback).
 function Install-UltraPlan {
   param([switch]$DefineHelpersOnly)
   # Helpers live inside this function so `irm | iex` leaves nothing behind in the user's session.
@@ -247,9 +248,18 @@ function Install-UltraPlan {
       Move-Item -Path "$shim.tmp" -Destination $shim -Force
     }
 
-    # Only the release the shim points at is kept; older release folders are removed.
+    # Only the release the shim points at is kept; older release folders are removed. `ut-todo update` sets
+    # ULTRAPLAN_KEEP_PREVIOUS to the version it replaces: that one release is kept as release-<new>.previous for rollback.
+    $previous = "$rel.previous"
+    if (Test-Path -LiteralPath $previous) { Remove-Item -Recurse -Force -LiteralPath $previous }
+    if ($env:ULTRAPLAN_KEEP_PREVIOUS) {
+      $keep = Join-Path $appDir "release-$($env:ULTRAPLAN_KEEP_PREVIOUS)"
+      if ((Test-Path -LiteralPath $keep) -and "release-$($env:ULTRAPLAN_KEEP_PREVIOUS)" -ne "release-$version") {
+        Move-Item -LiteralPath $keep -Destination $previous
+      }
+    }
     Get-ChildItem -Path $appDir -Directory -Filter 'release-*' |
-      Where-Object { $_.Name -ne "release-$version" } |
+      Where-Object { $_.Name -ne "release-$version" -and $_.Name -ne "release-$version.previous" } |
       ForEach-Object { Remove-Item -Recurse -Force -LiteralPath $_.FullName -ErrorAction SilentlyContinue }
 
     # Finish with the tool's own health command; a failed check fails the install.

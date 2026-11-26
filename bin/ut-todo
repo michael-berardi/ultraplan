@@ -24,10 +24,25 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import * as updates from "../src/update.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const STATE_DIR = ".steak-pi";
 const STALE_LOCK_MS = 30000;
+
+// Update contract v1 (docs/updates.md). `update` needs no core. Other commands
+// start the daily check alongside their work and print its notice afterwards;
+// `json` ops and the parent of the type-stripping re-exec below stay quiet.
+const ARGS = process.argv.slice(2);
+/** Exit once output is flushed: a timed-out check can leave a socket connecting that must not hold the shell. */
+function exitFlushed(code) {
+  return new Promise(() => process.stdout.write("", () => process.stderr.write("", () => process.exit(code))));
+}
+if (ARGS[0] === "update") await exitFlushed(await updates.updateCommand(ARGS.slice(1)));
+const quiet = !ARGS.length || ARGS[0] === "-h" || ARGS[0] === "--help" || ARGS.includes("json");
+const pendingNotice = quiet || (!process.features.typescript && process.env.UT_TODO_INNER !== "1")
+  ? undefined
+  : updates.passiveCheck();
 
 const { applyOp, render, TodoError } = await loadCore();
 const core = { TodoError };
@@ -45,9 +60,11 @@ const USAGE = `ut-todo — durable phased task progress for any agent with a she
   ut-todo view
   ut-todo json '{"op":"view"}'          # any native tool op, verbatim
   ut-todo --session NAME ...            # separate list for a named session
+  ut-todo update [--check|--skip]       # newer release; see ut-todo update --help
 
 One store per project directory, shared with Steak Pi's native todo tool:
-<cwd>/.steak-pi/todo/<hash>/{todo.json,TODO.md}. Local files only; no network.`;
+<cwd>/.steak-pi/todo/<hash>/{todo.json,TODO.md}. Plans stay in local files; on a
+terminal, ut-todo checks for a newer release once a day.`;
 
 function parse(argv) {
   if (!argv.length || argv[0] === "-h" || argv[0] === "--help") {
@@ -365,3 +382,7 @@ try {
   process.stderr.write(`ut-todo: ${error instanceof Error ? error.message : String(error)}\n`);
   process.exit(error instanceof TodoError || error instanceof SyntaxError ? 2 : 1);
 }
+// The command succeeded: a rollback copy from the last update is no longer needed.
+updates.pruneRollback();
+await updates.afterCommand(pendingNotice, { binPath: fileURLToPath(import.meta.url) });
+await exitFlushed(0);

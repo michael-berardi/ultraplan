@@ -21,7 +21,7 @@ import { describe, expect, it } from "vitest";
  */
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SHIPPED_DIRS = ["src", "bin", "pi", "integrations"];
-const SHIPPED_FILES = ["README.md", "SECURITY.md", "CONTRIBUTING.md", "CHANGELOG.md"];
+const SHIPPED_FILES = ["README.md", "SECURITY.md", "CONTRIBUTING.md", "CHANGELOG.md", "PRIVACY.md"];
 const PACKAGE_METADATA = ["author", "repository", "homepage", "bugs"];
 
 // Concrete model ids and provider routes that only an operator should choose.
@@ -138,7 +138,7 @@ describe("neutrality", () => {
     for (const sample of [
       "https://github.com/michael-berardi/ultraplan/releases/latest",
       "https://github.com/michael-berardi/steak-pi",
-      "github:michael-berardi/ultraplan#v0.4.2",
+      "github:michael-berardi/ultraplan#v0.5.0",
       "https://github.com/michael-berardi/ultraplan.git",
       "https://img.shields.io/github/license/michael-berardi/ultraplan",
     ]) expect(hits(PERSONAL, [["probe", sample]])).toEqual([]);

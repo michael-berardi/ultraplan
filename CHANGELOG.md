@@ -3,6 +3,24 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.0 — 2026-11-26
+
+- Update notices. On a terminal, `ut-todo` checks once a day for a newer
+  release (one anonymous request to the public GitHub release record) and
+  prints a two-line notice on stderr after your command. It stays silent in
+  `json` output, pipes, CI and agent shells, and with
+  `UT_TODO_NO_UPDATE_CHECK=1` or `ut-todo update --auto-check off`.
+- `ut-todo update` installs the new release. Installer installs download the
+  release's installer, check it against `SHA256SUMS` and run it; the installer
+  checks the archive and keeps the replaced release for `ut-todo update
+  --rollback` until the new one has run once (7 days at most). npm global
+  installs run npm; source checkouts get the `git pull` command.
+- `ut-todo update --check` (exit 0, 10 or 1), `--skip` and `--auto on|off|status`.
+  Automatic updates are off by default. All update state is one 0600 file in
+  the platform cache folder; see `docs/updates.md` and `PRIVACY.md`.
+- Installers: `ULTRAPLAN_KEEP_PREVIOUS` (set by `ut-todo update`) keeps the
+  replaced release as the single rollback copy.
+
 ## 0.4.2 — 2026-11-12
 
 - Windows installer fix: adding the bin folder to your user Path no longer

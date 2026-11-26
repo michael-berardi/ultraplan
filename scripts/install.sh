@@ -5,6 +5,7 @@
 # UltraPlan's own folder (nothing global). Re-running upgrades in place. No sudo, no shell profile edits.
 # Environment: ULTRAPLAN_HOME (default ~/.ultraplan), ULTRAPLAN_BIN_DIR (default ~/.local/bin),
 # ULTRAPLAN_VERSION (default: latest, e.g. 0.3.0), ULTRAPLAN_RELEASE_BASE (override the download base URL, used by tests).
+# ULTRAPLAN_KEEP_PREVIOUS is set by `ut-todo update`: the release it replaces is kept once for rollback.
 set -eu
 
 REPO="michael-berardi/ultraplan"
@@ -119,9 +120,13 @@ WRAP
 chmod 755 "$BIN_DIR/ut-todo.tmp.$$"; mv -f "$BIN_DIR/ut-todo.tmp.$$" "$BIN_DIR/ut-todo"
 fi
 
-# Only the release the wrapper points at is kept; older release folders are removed.
+# Only the release the wrapper points at is kept; older release folders are removed. `ut-todo update` sets
+# ULTRAPLAN_KEEP_PREVIOUS to the version it replaces: that one release is kept as $REL.previous for rollback.
+rm -rf "$REL.previous"
+keep="$APP/release-${ULTRAPLAN_KEEP_PREVIOUS:-none}"
+if [ -n "${ULTRAPLAN_KEEP_PREVIOUS:-}" ] && [ -d "$keep" ] && [ "$keep" != "$REL" ]; then mv "$keep" "$REL.previous"; fi
 for d in "$APP"/release-*; do
-  if [ -d "$d" ] && [ "$d" != "$REL" ]; then rm -rf "$d"; fi
+  if [ -d "$d" ] && [ "$d" != "$REL" ] && [ "$d" != "$REL.previous" ]; then rm -rf "$d"; fi
 done
 
 # Finish with the tool's own health command; a failed check fails the install.

@@ -21,7 +21,8 @@ the release notes if they want to be.
 ## Scope
 
 The CLI stores plain JSON and Markdown under the project's `.steak-pi/todo/`
-directory and makes no network calls. Automatic session detection also reads
+directory. Its only network use is the daily update check on a terminal and
+`ut-todo update` (see docs/updates.md). Automatic session detection also reads
 local agent transcripts. Release installers download archives and checksums,
 and may download Node.js.
 Relevant reports include unintended writes outside the store, unsafe handling

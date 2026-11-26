@@ -124,7 +124,11 @@ describe("installed under node_modules", () => {
     await fs.mkdir(path.join(pkg, "src"), { recursive: true });
     await fs.copyFile(new URL("../bin/ut-todo", import.meta.url), path.join(pkg, "bin", "ut-todo"));
     await fs.copyFile(new URL("../src/core.ts", import.meta.url), path.join(pkg, "src", "core.ts"));
-    await fs.writeFile(path.join(pkg, "package.json"), JSON.stringify({ type: "module" }));
+    await fs.copyFile(new URL("../src/update.js", import.meta.url), path.join(pkg, "src", "update.js"));
+    await fs.writeFile(path.join(pkg, "package.json"), JSON.stringify({
+      type: "module", version: "0.5.0",
+      repository: { url: "git+https://github.com/michael-berardi/ultraplan.git" },
+    }));
     const cwd = await tempDir();
     const clean = { ...process.env } as Record<string, string | undefined>;
     delete clean.CLAUDE_CODE_SESSION_ID;
