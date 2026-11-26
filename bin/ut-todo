@@ -23,6 +23,7 @@ import { promises as fs, readdirSync, readFileSync, realpathSync, statSync } fro
 import * as os from "node:os";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -57,14 +58,19 @@ const USAGE = `ut-todo — durable phased task progress for any agent with a she
   ut-todo json '{"op":"view"}'          # any native tool op, verbatim
   ut-todo --session NAME ...            # separate list for a named session
 
+  ut-todo update --check                # report only: 0 current, 10 available, 1 failed
+  ut-todo update [--skip [VERSION]|--auto on|off|status|--rollback]
+
 One store per project directory, shared with Steak Pi's native todo tool:
-<cwd>/.steak-pi/todo/<hash>/{todo.json,TODO.md}. Local files only; no network.`;
+<cwd>/.steak-pi/todo/<hash>/{todo.json,TODO.md}. Release checks, when enabled,
+make one anonymous GET to the public release record; see docs/updates.md.`;
 
 function parse(argv) {
   if (!argv.length || argv[0] === "-h" || argv[0] === "--help") {
     console.log(USAGE);
     process.exit(0);
   }
+  if (argv[0] === "update") return { updateArgs: argv.slice(1) };
   const rest = [];
   let session;
   for (let index = 0; index < argv.length; index++) {
@@ -229,6 +235,57 @@ async function loadCore() {
   }
 }
 
+const BIN_FILE = fileURLToPath(import.meta.url);
+const MANIFEST = fileURLToPath(new URL("../package.json", import.meta.url));
+
+/** Same in-place TypeScript loading as the core, for the optional update module. */
+let updateLoader;
+function updates() {
+  return updateLoader ??= loadTs("../src/update.ts");
+}
+async function loadTs(relative) {
+  const url = new URL(relative, import.meta.url);
+  try {
+    return await import(url.href);
+  } catch (error) {
+    if (error?.code !== "ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING") throw error;
+    const { stripTypeScriptTypes } = await import("node:module");
+    const emitWarning = process.emitWarning;
+    process.emitWarning = () => {};
+    try {
+      const js = stripTypeScriptTypes(readFileSync(url, "utf8"));
+      return await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
+    } finally {
+      process.emitWarning = emitWarning;
+    }
+  }
+}
+
+function envSet(value) {
+  return value !== undefined && value !== "" && value !== "0" && value !== "false";
+}
+function agentMode(env) {
+  return env.UT_TODO_AGENT === "1" || env.UT_TODO_MODE === "agent" ||
+    env.CLAUDECODE === "1" || env.CLAUDE_CODE_SESSION_ID !== undefined ||
+    env.CODEX_CLI_SESSION_ID !== undefined || env.PI_SESSION_ID !== undefined;
+}
+/** Automatic notices and checks are for interactive human terminals only. */
+function interactive(env, op) {
+  return Boolean(process.stdout.isTTY && process.stderr.isTTY) &&
+    !envSet(env.CI) && !agentMode(env) && op !== "json" &&
+    env.ULTRAPLAN_NO_UPDATE_CHECK !== "1";
+}
+async function ask(question, defaultYes) {
+  const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await prompt.question(`${question} `)).trim().toLowerCase();
+    if (!answer) return defaultYes;
+    return answer === "y" || answer === "yes";
+  } finally {
+    prompt.close();
+  }
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /** One writer at a time for this list; stale locks (crashed writer) break free. */
 async function withLock(lockPath, fn) {
@@ -340,8 +397,142 @@ function enrich(error, state) {
   return known ? new core.TodoError(`${message} — ${known}`) : error;
 }
 
-function main() {
-  const { op, session } = parse(process.argv.slice(2));
+async function handleUpdate(args) {
+  const lib = await updates();
+  const env = { ...process.env };
+  const paths = lib.updatePaths(env);
+  const deps = { env, paths, manifestFile: MANIFEST };
+  const [flag, value] = args;
+
+  if (flag === "--check") {
+    const result = await lib.checkForUpdate(deps);
+    if (result.status === "disabled") {
+      process.stderr.write("ut-todo: update checks are disabled\n");
+    } else if (result.status === "failed") {
+      process.stderr.write(`ut-todo: update check failed: ${result.failure}\n`);
+      process.exitCode = 1;
+    } else if (result.status === "available") {
+      process.stdout.write(`ut-todo ${result.latest} available (you have ${result.current}) · run: ut-todo update\n`);
+      if (result.notes) process.stdout.write(`\n${result.notes}\n`);
+      process.exitCode = 10;
+    } else {
+      const when = result.checkedAt ? ` (checked ${new Date(result.checkedAt).toISOString()})` : "";
+      process.stdout.write(`ut-todo ${result.current} is current${when}\n`);
+    }
+    return;
+  }
+  if (flag === "--skip") {
+    let version = lib.parseVersion(value);
+    if (!version) version = lib.parseVersion((await lib.readCache(paths))?.latest);
+    if (!version) fail("--skip needs a version, or run update --check first");
+    await lib.updateConfig(paths, { skipVersion: version });
+    process.stdout.write(`ut-todo: skipping ${version} until a newer release\n`);
+    return;
+  }
+  if (flag === "--auto") {
+    const mode = value ?? "status";
+    if (!["on", "off", "status"].includes(mode)) fail("--auto takes on, off or status");
+    if (mode !== "status") {
+      await lib.updateConfig(paths, { autoInstall: mode === "on", autoPrompted: true });
+    }
+    const config = await lib.readConfig(paths);
+    process.stdout.write(
+      `automatic updates: ${config.autoInstall ? "on" : "off"}\n` +
+      `automatic checks: ${config.checkAutomatically === false ? "off" : "on"}\n`,
+    );
+    return;
+  }
+  if (flag === "--rollback") {
+    const plan = lib.detectInstallKind(BIN_FILE, env);
+    if (plan.kind !== "installer" || !plan.appDir || !plan.wrapper) {
+      fail("rollback is available for installer-managed copies only");
+    }
+    await lib.rollbackRelease(plan.appDir, plan.wrapper);
+    process.stdout.write("ut-todo: previous release restored; it applies on the next run\n");
+    return;
+  }
+  if (flag === "--apply") {
+    if (env.ULTRAPLAN_UPDATE_APPLY !== "1") fail("internal update command");
+    const version = lib.parseVersion(value);
+    if (!version) fail("--apply needs a stable version");
+    try {
+      const result = await lib.installAvailable({ ...deps, version, binPath: BIN_FILE });
+      if (!result.installed) throw new Error(result.message ?? "install did not run");
+    } catch (error) {
+      await lib.writeCache(paths, {
+        ...(await lib.readCache(paths)),
+        checkedAt: Date.now(),
+        failure: `automatic install failed: ${lib.failureCause(error)}`,
+      });
+      process.exitCode = 1;
+    }
+    return;
+  }
+  if (flag && flag.startsWith("--")) fail(`unknown update option ${flag}`);
+
+  const result = await lib.checkForUpdate(deps);
+  if (result.status === "disabled") {
+    process.stderr.write("ut-todo: update checks are disabled\n");
+    process.exitCode = 1;
+  } else if (result.status === "failed") {
+    process.stderr.write(`ut-todo: update check failed: ${result.failure}\n`);
+    process.exitCode = 1;
+  } else if (result.status === "current") {
+    process.stdout.write(`ut-todo ${result.current} is current\n`);
+  } else if (result.latest) {
+    const version = result.latest;
+    process.stdout.write(`${result.current} → ${version}\n`);
+    if (result.notes) process.stdout.write(`${result.notes}\n`);
+    const plan = lib.detectInstallKind(BIN_FILE, env);
+    const info = await lib.packageInfo(MANIFEST);
+    const command = lib.installCommand(plan, version, info.owner, info.repo);
+    process.stdout.write(`Install command: ${command}\n`);
+    const canAsk = interactive(env, "update");
+    if (canAsk && !await ask(`Install ${version} now? [Y/n]`, true)) return;
+    const outcome = await lib.installAvailable({ ...deps, version, binPath: BIN_FILE });
+    if (!outcome.installed) {
+      process.stdout.write(`Run: ${command}\n`);
+      return;
+    }
+    process.stdout.write(`ut-todo ${version} installed; the new version applies on the next run.\n`);
+    const config = await lib.readConfig(paths);
+    if (config.autoInstall !== true && config.autoPrompted !== true && canAsk) {
+      const autoYes = await ask("Install future updates automatically? [y/N]", false);
+      await lib.updateConfig(paths, { autoInstall: autoYes, autoPrompted: true });
+      process.stdout.write(`automatic updates: ${autoYes ? "on" : "off"}\n`);
+    }
+  }
+}
+
+/** Called after the user's command, never on startup, and only on a human TTY. */
+async function maybeAutoCheck(op) {
+  const lib = await updates();
+  const env = { ...process.env };
+  if (!interactive(env, op)) return;
+  const paths = lib.updatePaths(env);
+  const config = await lib.readConfig(paths);
+  if (lib.isOptedOut(env, config)) return;
+  const result = await lib.checkForUpdate({ env, paths, manifestFile: MANIFEST, config });
+  const cache = await lib.readCache(paths);
+  if (!cache) return;
+  const autoFailure = result.status === "failed" && result.failure?.startsWith("automatic install failed");
+  const latest = result.status === "available" ? result.latest
+    : autoFailure ? lib.parseVersion(cache.latest) : undefined;
+  if (!latest) return;
+  if (config.autoInstall === true && !autoFailure && cache.autoAttemptedVersion !== latest) {
+    await lib.writeCache(paths, { ...cache, autoAttemptedVersion: latest });
+    void lib.startAutoInstall({ version: latest, binPath: BIN_FILE, env, paths });
+  }
+  const now = Date.now();
+  if (!lib.shouldNotice(env, config, cache, result.current, now)) return;
+  for (const line of lib.noticeText(result.current, latest, Boolean(process.stderr.isTTY))) {
+    process.stderr.write(`${line}\n`);
+  }
+  await lib.markNoticeShown(paths, latest, now);
+}
+
+function main(parsed) {
+  const { op, session } = parsed;
   const cwd = path.resolve(process.cwd());
   let owner;
   if (session !== undefined || process.env.UT_TODO_SESSION) {
@@ -356,24 +547,39 @@ function main() {
   return { op, dir };
 }
 
-const { op, dir } = main();
-try {
-  await withLock(path.join(dir, ".lock"), async () => {
-    const state = await load(path.join(dir, "todo.json"));
-    if (op.op === "view") {
-      process.stdout.write(`${render(state)}\n`);
-      return;
-    }
-    let next;
-    try {
-      next = applyOp(state, op);
-    } catch (error) {
-      throw enrich(error, state);
-    }
-    await persist(dir, next.state, next.output);
-    process.stdout.write(`${next.output}\n`);
-  });
-} catch (error) {
-  process.stderr.write(`ut-todo: ${error instanceof Error ? error.message : String(error)}\n`);
-  process.exit(error instanceof TodoError || error instanceof SyntaxError ? 2 : 1);
+const parsed = parse(process.argv.slice(2));
+if ("updateArgs" in parsed) {
+  try {
+    await handleUpdate(parsed.updateArgs);
+  } catch (error) {
+    process.stderr.write(`ut-todo: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  }
+} else {
+  const { op, dir } = main(parsed);
+  try {
+    await withLock(path.join(dir, ".lock"), async () => {
+      const state = await load(path.join(dir, "todo.json"));
+      if (op.op === "view") {
+        process.stdout.write(`${render(state)}\n`);
+        return;
+      }
+      let next;
+      try {
+        next = applyOp(state, op);
+      } catch (error) {
+        throw enrich(error, state);
+      }
+      await persist(dir, next.state, next.output);
+      process.stdout.write(`${next.output}\n`);
+    });
+  } catch (error) {
+    process.stderr.write(`ut-todo: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exit(error instanceof TodoError || error instanceof SyntaxError ? 2 : 1);
+  }
+  if (interactive(process.env, op.op)) {
+    queueMicrotask(() => {
+      void maybeAutoCheck(op.op).catch(() => {});
+    });
+  }
 }

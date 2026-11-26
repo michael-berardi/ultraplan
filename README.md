@@ -30,7 +30,7 @@ To inspect before running, download the script and read it first.
 With Node.js 22.19+ already installed, you can instead use npm:
 
 ```sh
-npm install --global github:michael-berardi/ultraplan#v0.4.3
+npm install --global github:michael-berardi/ultraplan#v0.5.0
 ```
 
 ### From source
@@ -45,6 +45,16 @@ ut-todo --help
 Use an npm prefix you can write to. npm links this directory, so keep it
 in place while installed. To try it without installing, run
 `node bin/ut-todo --help` from the repository directory.
+
+## Updates
+
+In interactive use, `ut-todo` checks the public GitHub release record at most
+once a day, anonymously, and prints a two-line notice after your command when
+a newer stable release exists. Automatic installs are off unless you opt in.
+Use `ut-todo update --check`, `ut-todo update`, `ut-todo update --skip`,
+`ut-todo update --auto on|off|status`, or `ut-todo update --rollback`.
+See [docs/updates.md](docs/updates.md) for the full contract, opt-outs,
+checksum verification and failure reporting.
 
 ### Updates and uninstalling
 
@@ -135,8 +145,15 @@ resolve to the same project and owner. Stored files survive context compaction.
 
 ## Privacy
 
-`ut-todo` and the Pi tool make no network calls. They contain no telemetry,
-analytics, crash reporting, update checks or model API calls.
+`ut-todo` and the Pi tool keep plans local and contain no telemetry,
+analytics, crash reporting or model API calls. Interactive CLI use makes at
+most one anonymous HTTPS GET per day to the repository's own public GitHub
+"latest release" record: a fixed user agent, no id, no installed version, no
+usage or machine data, a 4 s timeout and a cached result. Checks are off in
+CI, non-TTY and agent use; `ULTRAPLAN_NO_UPDATE_CHECK=1` or the config switch
+in [docs/updates.md](docs/updates.md) disables them. A failed check is only
+reported by `ut-todo update --check`. Installing is always explicit or
+opt-in.
 
 The installers run only when you run them: they download the release archive
 and its SHA-256 checksum from GitHub, and download Node.js from nodejs.org with

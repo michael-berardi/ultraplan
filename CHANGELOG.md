@@ -3,6 +3,20 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.0 — 2026-11-26
+
+- Added the v1 update contract: one anonymous, at-most-daily release check in
+  interactive use with a 4 s timeout, opt-out by `ULTRAPLAN_NO_UPDATE_CHECK=1`
+  or config, and no checks in CI, non-TTY or agent mode.
+- `ut-todo update --check|--skip|--auto on|off|status|--rollback` and a
+  non-modal stderr notice after commands; automatic install is opt-in,
+  stored in config and applied on the next run.
+- Installer updates verify `SHA256SUMS`, stage the release and keep one
+  rollback; npm-global installs use the package manager's upgrade command.
+  Failures are cached with their cause and reported by `--check`.
+- Added `docs/updates.md` with the `update-contract: v1` marker, a README
+  Updates/Privacy section, offline tests and aligned plugin metadata.
+
 ## 0.4.3 — 2026-11-26
 
 - Privacy: the CLI and Pi extension now create the plan store with 0700
