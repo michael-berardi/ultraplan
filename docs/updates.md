@@ -20,6 +20,15 @@ The result is cached at most once every 24 hours in
 records its cause there; it is never printed as noise and is never retried in a
 loop. `ut-todo update --check` reports the cause.
 
+Automatic checks never run inside the command you are waiting for. When the
+cached result is missing or older than 24 hours, a normal interactive command
+creates an owner-only in-flight claim and launches a detached, unref'd,
+low-priority child (`nice -n 10` on POSIX, plain runtime on Windows, with a
+fallback when `nice` is absent) to do the check and clear its claim. Rapid
+invocations that see a fresh claim reuse that check instead of starting
+another. An orphaned claim older than the 4 s timeout plus 10 s is reclaimed.
+The explicit `ut-todo update --check` remains synchronous.
+
 Automatic checks are off outside a human interactive terminal: no TTY, `CI`
 set, or an agent/headless host. `ULTRAPLAN_NO_UPDATE_CHECK=1` or
 `checkAutomatically: false` in `<config dir>/ultraplan/config.json` disables
@@ -27,10 +36,11 @@ checks entirely, including explicit ones.
 
 ## Notices
 
-After a normal command finishes, on a TTY only:
+From the cached result, on a TTY only, after a normal command finishes (so a
+check started by one command is normally noticed on the next one):
 
 ```text
-ut-todo 0.5.2 available (you have 0.5.1) · run: ut-todo update
+ut-todo 0.5.3 available (you have 0.5.2) · run: ut-todo update
 turn on automatic updates: ut-todo update --auto on · skip: ut-todo update --skip
 ```
 
@@ -57,8 +67,10 @@ its reply instead.
 - `ut-todo update --rollback` — restore the previous release for
   installer-managed copies (one rollback is kept).
 
-When automatic installs are on, the check launches a detached, unref'd child
-process and returns immediately: your command never waits for the install. On
+When automatic installs are on, the cached result on the next interactive
+command launches a detached, unref'd child process and returns immediately:
+your command never waits for the install. A failed install is recorded and the
+notice is retried on a later command. On
 POSIX the child starts with `nice -n 10` (and falls back to the plain runtime
 if `nice` is missing); Windows has no portable `nice`, so it uses the plain
 runtime detached and hidden. Output goes to the single owner-only file
@@ -81,8 +93,9 @@ overwriting files npm owns. Other install kinds print the matching command.
 ## Privacy
 
 Plans remain local, plain JSON and Markdown in 0700/0600 paths. The only
-network request the CLI itself makes is the anonymous check described above;
-there is no usage reporting, analytics, crash reporting or model API call.
+network request is the anonymous check described above, now made by a
+short-lived background child; there is no usage reporting, analytics, crash
+reporting or model API call.
 Installers run only when you run them or after you explicitly opt into
 automatic installs, and they verify checksums. Background install logs stay in
 the tool's own 0700 config directory. See the README Privacy section for

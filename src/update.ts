@@ -19,6 +19,8 @@ export const CHECK_TIMEOUT_MS = 4_000;
 export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 /** Contract 4a: background install logs are one bounded, owner-only file. */
 export const MAX_INSTALL_LOG_BYTES = 256 * 1024;
+/** A stale in-flight claim is reclaimed only after the check's 4 s timeout plus slack. */
+export const CHECK_CLAIM_MAX_MS = CHECK_TIMEOUT_MS + 10_000;
 const PRIVATE_DIR_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
 const PUBLIC_EXEC_MODE = 0o755;
@@ -27,6 +29,7 @@ const RELEASE_DIR_RE = /release-(\d+\.\d+\.\d+)/;
 
 export interface UpdatePaths {
   cacheFile: string;
+  claimFile: string;
   configFile: string;
   logDir: string;
 }
@@ -130,6 +133,7 @@ export function updatePaths(
         : path.join(env.XDG_CONFIG_HOME || path.join(home, ".config"), "ultraplan");
   return {
     cacheFile: path.join(cacheDir, "update-check.json"),
+    claimFile: path.join(cacheDir, "update-check.claim"),
     configFile: path.join(configDir, "config.json"),
     logDir: path.join(configDir, "logs"),
   };
@@ -216,6 +220,53 @@ export async function readCache(paths: UpdatePaths): Promise<UpdateCache | undef
 
 export async function writeCache(paths: UpdatePaths, cache: UpdateCache): Promise<void> {
   await writePrivateJson(paths.cacheFile, cache);
+}
+
+/**
+ * One in-flight check at a time: rapid CLI invocations reuse the claim and do
+ * not start another network child. A claim older than the check timeout is
+ * stale (an orphaned child) and can be taken over. Returns a secret token the
+ * owner must pass to `releaseCheckClaim`.
+ */
+export async function claimCheck(paths: UpdatePaths, now = Date.now()): Promise<string | undefined> {
+  const token = randomUUID();
+  const record = JSON.stringify({ token, pid: process.pid, startedAt: now });
+  const dir = path.dirname(paths.claimFile);
+  await fs.mkdir(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
+  await fs.chmod(dir, PRIVATE_DIR_MODE);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const handle = await fs.open(paths.claimFile, "wx", PRIVATE_FILE_MODE);
+      try {
+        await handle.writeFile(record, "utf8");
+      } finally {
+        await handle.close();
+      }
+      return token;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") return undefined;
+      if (attempt > 0) return undefined;
+      try {
+        const stat = await fs.stat(paths.claimFile);
+        if (now - stat.mtimeMs < CHECK_CLAIM_MAX_MS) return undefined;
+        await fs.rm(paths.claimFile, { force: true });
+      } catch {
+        return undefined;
+      }
+    }
+  }
+  return undefined;
+}
+
+/** Best-effort release that never removes another process's current claim. */
+export async function releaseCheckClaim(paths: UpdatePaths, token: string | undefined): Promise<void> {
+  if (!token) return;
+  try {
+    const raw = JSON.parse(await fs.readFile(paths.claimFile, "utf8"));
+    if (isRecord(raw) && raw.token === token) await fs.rm(paths.claimFile, { force: true });
+  } catch {
+    // Missing, unreadable or malformed claims expire on their own.
+  }
 }
 
 export function isOptedOut(env: NodeJS.ProcessEnv, config: UpdateConfig): boolean {
@@ -402,6 +453,22 @@ export async function markNoticeShown(paths: UpdatePaths, version: string, now =
   const cache = await readCache(paths);
   if (!cache) return;
   await writeCache(paths, { ...cache, shownVersion: parseVersion(version), shownAt: now });
+}
+
+/**
+ * The pending upgrade for the *next* interactive command comes only from the
+ * cache: the check itself now runs in a detached child. A recorded install
+ * failure drops the auto-install but keeps the fallback notice.
+ */
+export function cachedUpdate(
+  config: UpdateConfig,
+  cache: UpdateCache | undefined,
+  current: string,
+): { latest: string; autoFailed: boolean } | undefined {
+  if (!cache || config.skipVersion === cache.latest || !isNewer(cache.latest, current)) return undefined;
+  const latest = parseVersion(cache.latest);
+  if (!latest) return undefined;
+  return { latest, autoFailed: Boolean(cache.failure?.startsWith("automatic install failed:")) };
 }
 
 export function detectInstallKind(
@@ -651,16 +718,67 @@ export interface AutoInstallDeps {
 }
 
 /** POSIX has `nice`; Windows has no portable equivalent, so it uses the plain runtime. */
+export function backgroundLaunch(
+  binPath: string,
+  updateArgs: string[],
+  platform: string = process.platform,
+): { command: string; args: string[] } {
+  const direct = [binPath || process.argv[1] || "", "update", ...updateArgs];
+  return platform === "win32"
+    ? { command: process.execPath, args: direct }
+    : { command: "nice", args: ["-n", "10", process.execPath, ...direct] };
+}
+
 export function autoInstallLaunch(
   binPath: string,
   version: string,
   platform: string = process.platform,
 ): { command: string; args: string[] } {
-  const target = binPath || process.argv[1] || "";
-  const direct = [target, "update", "--apply", version];
-  return platform === "win32"
-    ? { command: process.execPath, args: direct }
-    : { command: "nice", args: ["-n", "10", process.execPath, ...direct] };
+  return backgroundLaunch(binPath, ["--apply", version], platform);
+}
+
+/**
+ * Hand the at-most-daily check to a detached, unref'd, low-priority child so
+ * no interactive command waits out the 4 s network timeout. A fresh claim from
+ * another invocation means this one does nothing; the child clears its own
+ * claim when the check finishes. Never blocks on the child's exit.
+ */
+export async function startBackgroundCheck(deps: {
+  env?: NodeJS.ProcessEnv;
+  paths?: UpdatePaths;
+  binPath?: string;
+  spawnImpl?: SpawnLike;
+  platform?: string;
+  now?: () => number;
+} = {}): Promise<boolean> {
+  const env = deps.env ?? process.env;
+  const platform = deps.platform ?? process.platform;
+  const paths = deps.paths ?? updatePaths(env, platform);
+  const token = await claimCheck(paths, deps.now?.() ?? Date.now());
+  if (!token) return false;
+  const spawnImpl = deps.spawnImpl ?? defaultSpawn;
+  const childEnv = { ...env, ULTRAPLAN_BACKGROUND_CHECK: "1", ULTRAPLAN_CHECK_CLAIM: token };
+  const launch = (command: string, args: string[]): Promise<number> => spawnImpl(command, args, {
+    env: childEnv,
+    stdio: "ignore",
+    detached: true,
+  });
+  try {
+    const { command, args } = backgroundLaunch(
+      deps.binPath ?? process.argv[1] ?? "", ["--check-background"], platform,
+    );
+    try {
+      await launch(command, args);
+    } catch (error) {
+      // Systems without `nice` still get a detached check, just at normal priority.
+      if (command !== "nice" || (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      await launch(process.execPath, args.slice(3));
+    }
+    return true;
+  } catch {
+    await releaseCheckClaim(paths, token);
+    return false;
+  }
 }
 
 /** Keep one install log file, retaining its newest bytes (contract 4a). */

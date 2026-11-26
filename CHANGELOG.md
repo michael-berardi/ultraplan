@@ -3,6 +3,18 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.2 — 2026-11-26
+
+- Automatic release checks no longer run inside the CLI process: a detached,
+  unref'd, low-priority child performs the one anonymous GET, so a command
+  never waits out the 4 s timeout. POSIX uses `nice -n 10` with a plain-runtime
+  fallback; Windows uses the detached hidden runtime.
+- An owner-only, atomic in-flight claim makes rapid invocations reuse one
+  check; orphaned claims expire shortly after the timeout. Notices and opted-in
+  installs now come from the cached result on the next interactive command.
+- Kept opt-in auto-install detached, verified (SHA-256 + rollback) and the
+  single install log capped at its newest 256 KB.
+
 ## 0.5.1 — 2026-11-26
 
 - Opt-in automatic installs now spawn a truly detached, unref'd child, so the

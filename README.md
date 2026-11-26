@@ -30,7 +30,7 @@ To inspect before running, download the script and read it first.
 With Node.js 22.19+ already installed, you can instead use npm:
 
 ```sh
-npm install --global github:michael-berardi/ultraplan#v0.5.1
+npm install --global github:michael-berardi/ultraplan#v0.5.2
 ```
 
 ### From source
@@ -49,8 +49,9 @@ in place while installed. To try it without installing, run
 ## Updates
 
 In interactive use, `ut-todo` checks the public GitHub release record at most
-once a day, anonymously, and prints a two-line notice after your command when
-a newer stable release exists. Automatic installs are off unless you opt in.
+once a day, anonymously, in a detached background child, and prints a two-line
+notice from the cached result on the next command when a newer stable release
+exists. Automatic installs are off unless you opt in.
 Use `ut-todo update --check`, `ut-todo update`, `ut-todo update --skip`,
 `ut-todo update --auto on|off|status`, or `ut-todo update --rollback`.
 Opted-in installs run detached (low priority where supported), so your command

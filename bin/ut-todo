@@ -404,6 +404,15 @@ async function handleUpdate(args) {
   const deps = { env, paths, manifestFile: MANIFEST };
   const [flag, value] = args;
 
+  if (flag === "--check-background") {
+    if (env.ULTRAPLAN_BACKGROUND_CHECK !== "1") fail("internal update command");
+    try {
+      await lib.checkForUpdate(deps);
+    } finally {
+      await lib.releaseCheckClaim(paths, env.ULTRAPLAN_CHECK_CLAIM);
+    }
+    return;
+  }
   if (flag === "--check") {
     const result = await lib.checkForUpdate(deps);
     if (result.status === "disabled") {
@@ -516,23 +525,27 @@ async function maybeAutoCheck(op) {
   const paths = lib.updatePaths(env);
   const config = await lib.readConfig(paths);
   if (lib.isOptedOut(env, config)) return;
-  const result = await lib.checkForUpdate({ env, paths, manifestFile: MANIFEST, config });
   const cache = await lib.readCache(paths);
-  if (!cache) return;
-  const autoFailure = result.status === "failed" && result.failure?.startsWith("automatic install failed");
-  const latest = result.status === "available" ? result.latest
-    : autoFailure ? lib.parseVersion(cache.latest) : undefined;
-  if (!latest) return;
-  if (config.autoInstall === true && !autoFailure && cache.autoAttemptedVersion !== latest) {
-    await lib.writeCache(paths, { ...cache, autoAttemptedVersion: latest });
-    void lib.startAutoInstall({ version: latest, binPath: BIN_FILE, env, paths });
-  }
   const now = Date.now();
-  if (!lib.shouldNotice(env, config, cache, result.current, now)) return;
-  for (const line of lib.noticeText(result.current, latest, Boolean(process.stderr.isTTY))) {
-    process.stderr.write(`${line}\n`);
+  const current = (await lib.packageInfo(MANIFEST)).version;
+  const pending = lib.cachedUpdate(config, cache, current);
+  if (pending) {
+    if (config.autoInstall === true && !pending.autoFailed && cache.autoAttemptedVersion !== pending.latest) {
+      await lib.writeCache(paths, { ...cache, autoAttemptedVersion: pending.latest });
+      void lib.startAutoInstall({ version: pending.latest, binPath: BIN_FILE, env, paths });
+    }
+    if (lib.shouldNotice(env, config, cache, current, now)) {
+      for (const line of lib.noticeText(current, pending.latest, Boolean(process.stderr.isTTY))) {
+        process.stderr.write(`${line}\n`);
+      }
+      await lib.markNoticeShown(paths, pending.latest, now);
+    }
   }
-  await lib.markNoticeShown(paths, latest, now);
+  // Never wait out the network timeout here: only a due check gets a detached
+  // child, and its in-flight claim makes rapid invocations reuse that work.
+  if (!cache || now - cache.checkedAt >= lib.CHECK_INTERVAL_MS) {
+    void lib.startBackgroundCheck({ env, paths, binPath: BIN_FILE, manifestFile: MANIFEST }).catch(() => {});
+  }
 }
 
 function main(parsed) {

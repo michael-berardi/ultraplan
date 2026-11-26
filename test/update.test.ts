@@ -7,11 +7,15 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  CHECK_CLAIM_MAX_MS,
   CHECK_TIMEOUT_MS,
   MAX_INSTALL_LOG_BYTES,
   autoInstallLaunch,
+  backgroundLaunch,
+  cachedUpdate,
   capInstallLog,
   checkForUpdate,
+  claimCheck,
   compareVersions,
   defaultSpawn,
   failureCause,
@@ -26,9 +30,11 @@ import {
   parseVersion,
   readCache,
   readConfig,
+  releaseCheckClaim,
   rollbackRelease,
   shouldNotice,
   startAutoInstall,
+  startBackgroundCheck,
   swapRelease,
   updateConfig,
   updatePaths,
@@ -48,6 +54,15 @@ const MANIFEST = path.join(ROOT, "package.json");
 const BIN = path.join(ROOT, "bin", "ut-todo");
 const run = promisify(execFile);
 const tempDirs: string[] = [];
+
+async function exists(file: string): Promise<boolean> {
+  try {
+    await fs.stat(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function fixture() {
   const dir = await fs.mkdtemp(path.join(tmpdir(), "ultraplan-update-"));
@@ -371,6 +386,110 @@ describe("detached automatic installs", () => {
   });
 });
 
+describe("detached checks and in-flight claims", () => {
+  it("keeps one fresh claim, reclaims orphans and releases only its own token", async () => {
+    const { paths } = await fixture();
+    const token = await claimCheck(paths);
+    expect(token).toBeTruthy();
+    expect(await claimCheck(paths)).toBeUndefined();
+    expect((await fs.stat(paths.claimFile)).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(await fs.readFile(paths.claimFile, "utf8")).token).toBe(token);
+    await releaseCheckClaim(paths, "another-token");
+    expect(await exists(paths.claimFile)).toBe(true);
+    await releaseCheckClaim(paths, token);
+    expect(await exists(paths.claimFile)).toBe(false);
+
+    const orphan = await claimCheck(paths);
+    expect(orphan).toBeTruthy();
+    const stale = new Date(Date.now() - CHECK_CLAIM_MAX_MS - 1_000);
+    await fs.utimes(paths.claimFile, stale, stale);
+    const reclaimed = await claimCheck(paths);
+    expect(reclaimed).toBeTruthy();
+    expect(reclaimed).not.toBe(orphan);
+    expect(await claimCheck(paths)).toBeUndefined();
+    await releaseCheckClaim(paths, reclaimed);
+  });
+
+  it("launches a detached low-priority child and reuses the in-flight claim", async () => {
+    const { env, paths } = await fixture();
+    const calls: Array<{ command: string; args: string[]; options?: Parameters<SpawnLike>[2] }> = [];
+    const spawnImpl: SpawnLike = async (command, args, options) => {
+      calls.push({ command, args, options });
+      return 0;
+    };
+    const deps = { env, paths, binPath: "/tmp/ut-todo", platform: "darwin", spawnImpl };
+    expect(await startBackgroundCheck(deps)).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].command).toBe("nice");
+    expect(calls[0].args).toEqual(["-n", "10", process.execPath, "/tmp/ut-todo", "update", "--check-background"]);
+    expect(calls[0].options?.detached).toBe(true);
+    expect(calls[0].options?.stdio).toBe("ignore");
+    expect(calls[0].options?.env?.ULTRAPLAN_BACKGROUND_CHECK).toBe("1");
+    const token = calls[0].options?.env?.ULTRAPLAN_CHECK_CLAIM;
+    expect(typeof token).toBe("string");
+    expect(await startBackgroundCheck(deps)).toBe(false);
+    expect(calls).toHaveLength(1);
+    await releaseCheckClaim(paths, token);
+    expect(backgroundLaunch("/tmp/ut-todo", ["--check-background"], "win32")).toEqual({
+      command: process.execPath, args: ["/tmp/ut-todo", "update", "--check-background"],
+    });
+  });
+
+  it("falls back to a plain runtime and releases the claim on a failed launch", async () => {
+    const { env, paths } = await fixture();
+    const called: string[][] = [];
+    const fallback: SpawnLike = async (command, args, options) => {
+      called.push([command, ...args]);
+      expect(options?.detached).toBe(true);
+      if (command === "nice") throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      return 0;
+    };
+    expect(await startBackgroundCheck({ env, paths, binPath: "/tmp/ut-todo", platform: "darwin", spawnImpl: fallback })).toBe(true);
+    expect(called[1]).toEqual([process.execPath, "/tmp/ut-todo", "update", "--check-background"]);
+    await releaseCheckClaim(paths, "wrong-token");
+    expect(await exists(paths.claimFile)).toBe(true);
+
+    const second = await fixture();
+    expect(await startBackgroundCheck({
+      env: second.env, paths: second.paths, platform: "darwin",
+      spawnImpl: async () => { throw new Error("spawn blocked"); },
+    })).toBe(false);
+    expect(await exists(second.paths.claimFile)).toBe(false);
+  });
+
+  it("takes the notice and opted-in install from the cache, not an in-process check", () => {
+    const cache = { checkedAt: 1_000, latest: "0.5.3", autoAttemptedVersion: "0.5.1" };
+    expect(cachedUpdate({}, cache, "0.5.2")).toEqual({ latest: "0.5.3", autoFailed: false });
+    expect(cachedUpdate({}, undefined, "0.5.2")).toBeUndefined();
+    expect(cachedUpdate({}, { ...cache, latest: "0.4.9" }, "0.5.2")).toBeUndefined();
+    expect(cachedUpdate({ skipVersion: "0.5.3" }, cache, "0.5.2")).toBeUndefined();
+    expect(cachedUpdate({}, { ...cache, failure: "automatic install failed: bad" }, "0.5.2"))
+      .toEqual({ latest: "0.5.3", autoFailed: true });
+  });
+
+  it("clears its claim in the internal child and refuses a user-invoked check", async () => {
+    const { env, paths } = await fixture();
+    const token = await claimCheck(paths);
+    await writeCache(paths, { checkedAt: Date.now() });
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env, ...env,
+      ULTRAPLAN_BACKGROUND_CHECK: "1", ULTRAPLAN_CHECK_CLAIM: token,
+    };
+    const silent = await run(process.execPath, [BIN, "update", "--check-background"], {
+      cwd: ROOT, env: childEnv, encoding: "utf8", timeout: 15_000,
+    });
+    expect(silent.stdout).toBe("");
+    expect(silent.stderr).toBe("");
+    expect(await exists(paths.claimFile)).toBe(false);
+
+    const userEnv = { ...childEnv };
+    delete userEnv.ULTRAPLAN_BACKGROUND_CHECK;
+    await expect(run(process.execPath, [BIN, "update", "--check-background"], {
+      cwd: ROOT, env: userEnv, encoding: "utf8", timeout: 15_000,
+    })).rejects.toMatchObject({ code: 2, stderr: expect.stringContaining("internal update command") });
+  });
+});
+
 describe("shipped documentation and metadata", () => {
   it("carries the update-contract marker, aligned versions and README sections", async () => {
     const docs = await fs.readFile(path.join(ROOT, "docs", "updates.md"), "utf8");
@@ -393,6 +512,12 @@ describe("shipped documentation and metadata", () => {
     expect(binSource).toContain("agentMode(env)");
     expect(binSource).toContain("!envSet(env.CI)");
     expect(binSource).toContain("process.stdout.isTTY && process.stderr.isTTY");
+    expect(binSource).toContain("startBackgroundCheck({");
+    expect(binSource).toContain('"--check-background"');
+    expect(binSource).toContain("cachedUpdate(config, cache, current)");
+    expect(binSource).toContain("now - cache.checkedAt >= lib.CHECK_INTERVAL_MS");
+    expect(docs).toContain("in-flight claim");
+    expect(changelog).toContain("0.5.2");
   });
 });
 
