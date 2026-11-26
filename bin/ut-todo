@@ -466,6 +466,10 @@ async function handleUpdate(args) {
       });
       process.exitCode = 1;
     }
+    // The detached launcher caps before starting; cap again after the install
+    // so one verbose run cannot grow the single background log without bound.
+    const logFile = env.ULTRAPLAN_INSTALL_LOG;
+    if (logFile) await lib.capInstallLog(logFile).catch(() => {});
     return;
   }
   if (flag && flag.startsWith("--")) fail(`unknown update option ${flag}`);

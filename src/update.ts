@@ -17,6 +17,8 @@ import { fileURLToPath } from "node:url";
 export const TOOL = "ut-todo";
 export const CHECK_TIMEOUT_MS = 4_000;
 export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1_000;
+/** Contract 4a: background install logs are one bounded, owner-only file. */
+export const MAX_INSTALL_LOG_BYTES = 256 * 1024;
 const PRIVATE_DIR_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
 const PUBLIC_EXEC_MODE = 0o755;
@@ -85,6 +87,7 @@ export type SpawnLike = (command: string, args: string[], options?: {
   cwd?: string;
   stdio?: "inherit" | "ignore" | Array<"ignore" | number>;
   env?: NodeJS.ProcessEnv;
+  detached?: boolean;
 }) => Promise<number>;
 
 export interface InstallPlan {
@@ -134,7 +137,7 @@ export function updatePaths(
 
 async function atomicWrite(
   file: string,
-  content: string,
+  content: string | Buffer,
   mode = PRIVATE_FILE_MODE,
   privateDir = false,
 ): Promise<void> {
@@ -550,15 +553,25 @@ export async function rollbackRelease(appDir: string, wrapper: string): Promise<
   if (backup) await atomicWrite(wrapper, backup.text, backup.mode || PUBLIC_EXEC_MODE);
 }
 
-const defaultSpawn: SpawnLike = (command, args, options) => new Promise((resolve, reject) => {
+export const defaultSpawn: SpawnLike = (command, args, options) => new Promise((resolve, reject) => {
+  const detached = options?.detached === true;
   const child = spawn(command, args, {
     cwd: options?.cwd,
     env: options?.env,
     stdio: options?.stdio ?? "inherit",
     windowsHide: true,
+    ...(detached ? { detached: true } : {}),
   });
   child.on("error", reject);
-  child.on("exit", (code) => resolve(code ?? 1));
+  if (detached) {
+    // Unref before waiting for anything: a background install must not hold
+    // the invoking command open. Resolve on spawn, not on child exit; the
+    // child records its own failures in the cache and the log.
+    child.unref();
+    child.once("spawn", () => resolve(0));
+  } else {
+    child.on("exit", (code) => resolve(code ?? 1));
+  }
 });
 
 export interface InstallDeps {
@@ -634,32 +647,87 @@ export interface AutoInstallDeps {
   env?: NodeJS.ProcessEnv;
   paths?: UpdatePaths;
   spawnImpl?: SpawnLike;
+  platform?: string;
+}
+
+/** POSIX has `nice`; Windows has no portable equivalent, so it uses the plain runtime. */
+export function autoInstallLaunch(
+  binPath: string,
+  version: string,
+  platform: string = process.platform,
+): { command: string; args: string[] } {
+  const target = binPath || process.argv[1] || "";
+  const direct = [target, "update", "--apply", version];
+  return platform === "win32"
+    ? { command: process.execPath, args: direct }
+    : { command: "nice", args: ["-n", "10", process.execPath, ...direct] };
+}
+
+/** Keep one install log file, retaining its newest bytes (contract 4a). */
+export async function capInstallLog(
+  file: string,
+  maxBytes = MAX_INSTALL_LOG_BYTES,
+): Promise<void> {
+  let size: number;
+  try {
+    size = (await fs.stat(file)).size;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  if (size <= maxBytes) return;
+  const tail = Buffer.allocUnsafe(Math.min(size, maxBytes));
+  const handle = await fs.open(file, "r");
+  let kept = 0;
+  try {
+    while (kept < tail.length) {
+      const { bytesRead } = await handle.read(tail, kept, tail.length - kept, size - tail.length + kept);
+      if (bytesRead === 0) break;
+      kept += bytesRead;
+    }
+  } finally {
+    await handle.close();
+  }
+  await atomicWrite(file, tail.subarray(0, kept), PRIVATE_FILE_MODE);
 }
 
 /** Detached, low-priority install for the opt-in path; no output in this process. */
 export async function startAutoInstall(deps: AutoInstallDeps): Promise<void> {
   const env = deps.env ?? process.env;
-  const paths = deps.paths ?? updatePaths(env);
+  const platform = deps.platform ?? process.platform;
+  const paths = deps.paths ?? updatePaths(env, platform);
   const spawnImpl = deps.spawnImpl ?? defaultSpawn;
-  const recordFailure = (error: unknown): Promise<void> => readCache(paths).then((cache) => writeCache(paths, {
-    ...(cache ?? {}),
-    checkedAt: Date.now(),
-    failure: `automatic install failed: ${failureCause(error)}`,
-  })).catch(() => {});
-  const command = process.platform === "win32" ? process.execPath : "nice";
-  const args = process.platform === "win32"
-    ? [deps.binPath ?? process.argv[1] ?? "", "update", "--apply", deps.version]
-    : ["-n", "10", process.execPath, deps.binPath ?? process.argv[1] ?? "", "update", "--apply", deps.version];
+  const recordFailure = async (error: unknown): Promise<void> => {
+    await readCache(paths).then((cache) => writeCache(paths, {
+      ...(cache ?? {}),
+      checkedAt: Date.now(),
+      failure: `automatic install failed: ${failureCause(error)}`,
+    })).catch(() => {});
+  };
+  const { command, args } = autoInstallLaunch(
+    deps.binPath ?? process.argv[1] ?? "", deps.version, platform,
+  );
   let descriptor: number | undefined;
   try {
     await fs.mkdir(paths.logDir, { recursive: true, mode: PRIVATE_DIR_MODE });
-    descriptor = openSync(path.join(paths.logDir, "update.log"), "a", PRIVATE_FILE_MODE);
-    void spawnImpl(command, args, {
-      env: { ...env, ULTRAPLAN_UPDATE_APPLY: "1" },
-      stdio: ["ignore", descriptor, descriptor],
-    }).catch(recordFailure);
+    await fs.chmod(paths.logDir, PRIVATE_DIR_MODE);
+    const logFile = path.join(paths.logDir, "update.log");
+    await capInstallLog(logFile);
+    descriptor = openSync(logFile, "a", PRIVATE_FILE_MODE);
+    const launch = (name: string, argv: string[]): Promise<number> => spawnImpl(name, argv, {
+      env: { ...env, ULTRAPLAN_UPDATE_APPLY: "1", ULTRAPLAN_INSTALL_LOG: logFile },
+      stdio: ["ignore", descriptor!, descriptor!],
+      detached: true,
+    });
+    try {
+      await launch(command, args);
+    } catch (error) {
+      // Systems without `nice` still get a detached install, just at normal priority.
+      if (command !== "nice" || (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      await launch(process.execPath, args.slice(3));
+    }
   } catch (error) {
-    void recordFailure(error);
+    await recordFailure(error);
   } finally {
     if (descriptor !== undefined) closeSync(descriptor);
   }

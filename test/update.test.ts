@@ -8,8 +8,12 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CHECK_TIMEOUT_MS,
+  MAX_INSTALL_LOG_BYTES,
+  autoInstallLaunch,
+  capInstallLog,
   checkForUpdate,
   compareVersions,
+  defaultSpawn,
   failureCause,
   installAvailable,
   installCommand,
@@ -24,6 +28,7 @@ import {
   readConfig,
   rollbackRelease,
   shouldNotice,
+  startAutoInstall,
   swapRelease,
   updateConfig,
   updatePaths,
@@ -31,6 +36,7 @@ import {
   writeCache,
   type FetchLike,
   type FetchResponse,
+  type SpawnLike,
 } from "../src/update.ts";
 
 /**
@@ -281,6 +287,87 @@ describe("install safety", () => {
     expect(await fs.readFile(wrapper, "utf8")).toContain("release-0.5.0");
     expect(env.ULTRAPLAN_CACHE_DIR).toBeTruthy();
     expect(paths.logDir).toContain("logs");
+  });
+});
+
+describe("detached automatic installs", () => {
+  it("launches low priority, detached and unref'd without waiting for the child", async () => {
+    const started = Date.now();
+    const code = await defaultSpawn(
+      process.execPath, ["-e", "setTimeout(() => {}, 3000)"],
+      { detached: true, stdio: "ignore" },
+    );
+    expect(code).toBe(0);
+    expect(Date.now() - started).toBeLessThan(1_500);
+  });
+
+  it("uses a detached low-priority child and a capped, private log", async () => {
+    const { env, paths } = await fixture();
+    const calls: Array<{ command: string; args: string[]; options?: Parameters<SpawnLike>[2] }> = [];
+    const spawnImpl: SpawnLike = async (command, args, options) => {
+      calls.push({ command, args, options });
+      return 0;
+    };
+    const logFile = path.join(paths.logDir, "update.log");
+    await fs.mkdir(paths.logDir, { recursive: true, mode: 0o700 });
+    await fs.writeFile(logFile, "a".repeat(MAX_INSTALL_LOG_BYTES + 512), { mode: 0o600 });
+
+    await startAutoInstall({
+      version: "9.0.0", binPath: "/tmp/ut-todo", env, paths, platform: "darwin", spawnImpl,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].command).toBe("nice");
+    expect(calls[0].args).toEqual(["-n", "10", process.execPath, "/tmp/ut-todo", "update", "--apply", "9.0.0"]);
+    expect(calls[0].options?.detached).toBe(true);
+    expect(calls[0].options?.stdio?.[0]).toBe("ignore");
+    expect(calls[0].options?.env?.ULTRAPLAN_UPDATE_APPLY).toBe("1");
+    expect(calls[0].options?.env?.ULTRAPLAN_INSTALL_LOG).toBe(logFile);
+    const log = await fs.readFile(logFile, "utf8");
+    expect(log).toHaveLength(MAX_INSTALL_LOG_BYTES);
+    expect(log.endsWith("a")).toBe(true);
+    expect((await fs.stat(logFile)).mode & 0o777).toBe(0o600);
+
+    expect(autoInstallLaunch("/tmp/ut-todo", "9.0.0", "win32")).toEqual({
+      command: process.execPath, args: ["/tmp/ut-todo", "update", "--apply", "9.0.0"],
+    });
+  });
+
+  it("falls back to a detached plain runtime when nice is absent", async () => {
+    const { env, paths } = await fixture();
+    const called: string[][] = [];
+    const spawnImpl: SpawnLike = async (command, args, options) => {
+      called.push([command, ...args]);
+      expect(options?.detached).toBe(true);
+      if (command === "nice") throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      return 0;
+    };
+    await startAutoInstall({ version: "9.0.0", binPath: "/tmp/ut-todo", env, paths, platform: "darwin", spawnImpl });
+    expect(called).toHaveLength(2);
+    expect(called[1]).toEqual([process.execPath, "/tmp/ut-todo", "update", "--apply", "9.0.0"]);
+  });
+
+  it("records a launch failure and leaves the current release untouched", async () => {
+    const { env, paths } = await fixture();
+    await startAutoInstall({
+      version: "9.0.0",
+      env,
+      paths,
+      platform: "darwin",
+      spawnImpl: async () => { throw new Error("spawn blocked"); },
+    });
+    expect((await readCache(paths))?.failure).toMatch(/^automatic install failed: spawn blocked$/);
+  });
+
+  it("caps a large log to its newest bytes and ignores a missing log", async () => {
+    const { dir } = await fixture();
+    const logFile = path.join(dir, "update.log");
+    await fs.writeFile(logFile, `${"old".repeat(100_000)}${"END"}`);
+    await capInstallLog(logFile);
+    const log = await fs.readFile(logFile, "utf8");
+    expect(Buffer.byteLength(log)).toBeLessThanOrEqual(MAX_INSTALL_LOG_BYTES);
+    expect(log.endsWith("END")).toBe(true);
+    await expect(capInstallLog(path.join(dir, "absent.log"))).resolves.toBeUndefined();
   });
 });
 

@@ -30,7 +30,7 @@ checks entirely, including explicit ones.
 After a normal command finishes, on a TTY only:
 
 ```text
-ut-todo 0.5.1 available (you have 0.5.0) · run: ut-todo update
+ut-todo 0.5.2 available (you have 0.5.1) · run: ut-todo update
 turn on automatic updates: ut-todo update --auto on · skip: ut-todo update --skip
 ```
 
@@ -57,10 +57,16 @@ its reply instead.
 - `ut-todo update --rollback` — restore the previous release for
   installer-managed copies (one rollback is kept).
 
-When automatic installs are on, the check starts a detached, low-priority
-install, logs it under `<config dir>/ultraplan/logs/`, and the new version
-applies on the next run. A failed install leaves the current version working,
-records the cause and falls back to the notice.
+When automatic installs are on, the check launches a detached, unref'd child
+process and returns immediately: your command never waits for the install. On
+POSIX the child starts with `nice -n 10` (and falls back to the plain runtime
+if `nice` is missing); Windows has no portable `nice`, so it uses the plain
+runtime detached and hidden. Output goes to the single owner-only file
+`<config dir>/ultraplan/logs/update.log` (0600), trimmed to its newest 256 KB
+before a run and again after the install. The child keeps the verified swap
+and one rollback, records its own failures in the update cache, and the new
+version applies on the next run. A failed install leaves the current version
+working, records the cause and falls back to the notice.
 
 ## Install safety
 
@@ -77,5 +83,7 @@ overwriting files npm owns. Other install kinds print the matching command.
 Plans remain local, plain JSON and Markdown in 0700/0600 paths. The only
 network request the CLI itself makes is the anonymous check described above;
 there is no usage reporting, analytics, crash reporting or model API call.
-Installers run only when you run them and verify checksums. See the README
-Privacy section for details.
+Installers run only when you run them or after you explicitly opt into
+automatic installs, and they verify checksums. Background install logs stay in
+the tool's own 0700 config directory. See the README Privacy section for
+details.

@@ -3,6 +3,16 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.1 — 2026-11-26
+
+- Opt-in automatic installs now spawn a truly detached, unref'd child, so the
+  command that triggered the check exits immediately. POSIX uses `nice -n 10`
+  with a plain-runtime fallback; Windows uses the detached runtime (no `nice`
+  equivalent). Verified swapping, one rollback and failure reporting are kept.
+- Background install logs are one owner-only file capped at the newest 256 KB,
+  before launch and after the child install. Documentation and the Claude Code
+  plugin version match the package version.
+
 ## 0.5.0 — 2026-11-26
 
 - Added the v1 update contract: one anonymous, at-most-daily release check in
