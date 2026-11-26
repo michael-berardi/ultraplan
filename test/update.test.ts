@@ -12,6 +12,7 @@ import {
   compareVersions,
   failureCause,
   installAvailable,
+  installCommand,
   isNewer,
   isOptedOut,
   markNoticeShown,
@@ -242,6 +243,15 @@ describe("install safety", () => {
     await expect(installAvailable(deps)).rejects.toThrow(/checksum mismatch/);
     expect(await fs.readFile(path.join(app, "release-0.5.0", "bin", "ut-todo"), "utf8")).toBe("old");
     expect(await fs.readdir(app)).toEqual(["release-0.5.0"]);
+  });
+
+  it("names the install command that matches the install kind", () => {
+    expect(installCommand({ kind: "npm" }, "1.2.3", "owner", "repo"))
+      .toBe("npm install --global github:owner/repo#v1.2.3");
+    expect(installCommand({ kind: "installer" }, "1.2.3", "owner", "repo", "darwin"))
+      .toContain("install.sh | sh");
+    expect(installCommand({ kind: "installer" }, "1.2.3", "owner", "repo", "win32"))
+      .toContain("install.ps1 | iex");
   });
 
   it("swaps a verified release and rolls it back", async () => {

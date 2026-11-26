@@ -425,11 +425,20 @@ export function detectInstallKind(
   return { kind: "manual" };
 }
 
-export function installCommand(plan: InstallPlan, version: string, owner: string, repo: string): string {
+export function installCommand(
+  plan: InstallPlan,
+  version: string,
+  owner: string,
+  repo: string,
+  platform: string = process.platform,
+): string {
   const tag = parseVersion(version) ?? version;
   if (plan.kind === "npm") return `npm install --global github:${owner}/${repo}#v${tag}`;
   if (plan.kind === "installer") {
-    return `curl -fsSL https://github.com/${owner}/${repo}/releases/download/v${tag}/install.sh | sh`;
+    const script = platform === "win32" ? "install.ps1" : "install.sh";
+    const prefix = platform === "win32" ? "irm " : "curl -fsSL ";
+    const suffix = platform === "win32" ? " | iex" : " | sh";
+    return `${prefix}https://github.com/${owner}/${repo}/releases/download/v${tag}/${script}${suffix}`;
   }
   return "see docs/updates.md for the command that matches your install";
 }
@@ -568,6 +577,14 @@ export async function installAvailable(deps: InstallDeps): Promise<InstallResult
   const plan = detectInstallKind(deps.binPath ?? process.argv[1] ?? "", env);
   const command = installCommand(plan, deps.version, info.owner, info.repo);
   if (plan.kind === "manual") return { kind: "manual", installed: false, command };
+  if (process.platform === "win32" && plan.kind === "installer") {
+    return {
+      kind: "installer",
+      installed: false,
+      command,
+      message: "Windows installer-managed copies update with the PowerShell installer command",
+    };
+  }
   if (plan.kind === "npm") {
     const code = await (deps.spawnImpl ?? defaultSpawn)("npm", ["install", "--global", `github:${info.owner}/${info.repo}#v${parseVersion(deps.version) ?? deps.version}`]);
     if (code !== 0) throw new Error(`package install failed with exit code ${code}`);
