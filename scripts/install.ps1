@@ -111,6 +111,9 @@ function Install-UltraPlan {
   }
 
   if ($DefineHelpersOnly) { return }
+  # The installer itself sends no usage data; keep any tool it invokes offline-first too.
+  $previousDoNotTrack = $env:DO_NOT_TRACK
+  $env:DO_NOT_TRACK = '1'
   $ErrorActionPreference = 'Stop'
   $PSNativeCommandUseErrorActionPreference = $false
   $ProgressPreference = 'SilentlyContinue'
@@ -283,6 +286,8 @@ function Install-UltraPlan {
   } finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
     if ($staging) { Remove-Item -Recurse -Force -LiteralPath $staging -ErrorAction SilentlyContinue }
+    if ($null -eq $previousDoNotTrack) { Remove-Item Env:DO_NOT_TRACK -ErrorAction SilentlyContinue }
+    else { $env:DO_NOT_TRACK = $previousDoNotTrack }
   }
 }
 

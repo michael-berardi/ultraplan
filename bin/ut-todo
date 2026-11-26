@@ -28,6 +28,8 @@ import { fileURLToPath } from "node:url";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const STATE_DIR = ".steak-pi";
 const STALE_LOCK_MS = 30000;
+const PRIVATE_DIR_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
 
 const { applyOp, render, TodoError } = await loadCore();
 const core = { TodoError };
@@ -35,6 +37,15 @@ const core = { TodoError };
 function fail(message, code = 2) {
   console.error(`ut-todo: ${message}`);
   process.exit(code);
+}
+
+/** Owner-only store. Also tightens directories written by older versions. */
+async function privateDirs(dir) {
+  const base = path.resolve(dir, "..", ".."); // <project>/.steak-pi
+  for (const target of [base, path.join(base, "todo"), dir]) {
+    await fs.mkdir(target, { recursive: true, mode: PRIVATE_DIR_MODE });
+    await fs.chmod(target, PRIVATE_DIR_MODE);
+  }
 }
 
 const USAGE = `ut-todo — durable phased task progress for any agent with a shell.
@@ -221,14 +232,15 @@ async function loadCore() {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /** One writer at a time for this list; stale locks (crashed writer) break free. */
 async function withLock(lockPath, fn) {
-  await fs.mkdir(path.dirname(lockPath), { recursive: true });
+  await privateDirs(path.dirname(lockPath));
   for (let attempt = 0; ; attempt++) {
     let handle;
     try {
-      handle = await fs.open(lockPath, "wx", 0o600);
+      handle = await fs.open(lockPath, "wx", PRIVATE_FILE_MODE);
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
       try {
+        await fs.chmod(lockPath, PRIVATE_FILE_MODE);
         const stat = await fs.stat(lockPath);
         if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
           await fs.rm(lockPath, { force: true });
@@ -283,9 +295,9 @@ async function load(statePath) {
 async function stage(target, content) {
   const temporary = path.join(
     path.dirname(target),
-    `.${path.basename(target)}.${process.pid}.${crypto.randomUUID()}.tmp`,
+    `.${path.basename(target)}.${process.pid}.${randomUUID()}.tmp`,
   );
-  await fs.writeFile(temporary, content, { encoding: "utf8", flag: "wx" });
+  await fs.writeFile(temporary, content, { encoding: "utf8", flag: "wx", mode: PRIVATE_FILE_MODE });
   return temporary;
 }
 
@@ -293,7 +305,7 @@ async function stage(target, content) {
 async function persist(dir, state, output) {
   const statePath = path.join(dir, "todo.json");
   const markdownPath = path.join(dir, "TODO.md");
-  await fs.mkdir(dir, { recursive: true });
+  await privateDirs(dir);
   let stateTemp;
   let markdownTemp;
   try {

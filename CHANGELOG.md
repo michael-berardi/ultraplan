@@ -3,6 +3,15 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.4.3 — 2026-11-26
+
+- Privacy: the CLI and Pi extension now create the plan store with 0700
+  directories and 0600 files, and tighten stores written by older versions.
+- Both installers set `DO_NOT_TRACK=1` for the processes they invoke (and
+  restore the caller's value on Windows). The test runner does the same.
+- Added a README Privacy section and a privacy test that blocks network APIs
+  during CLI runs and fails if telemetry code or endpoints are reintroduced.
+
 ## 0.4.2 — 2026-11-12
 
 - Windows installer fix: adding the bin folder to your user Path no longer

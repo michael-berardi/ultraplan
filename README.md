@@ -30,7 +30,7 @@ To inspect before running, download the script and read it first.
 With Node.js 22.19+ already installed, you can instead use npm:
 
 ```sh
-npm install --global github:michael-berardi/ultraplan#v0.4.2
+npm install --global github:michael-berardi/ultraplan#v0.4.3
 ```
 
 ### From source
@@ -115,7 +115,7 @@ then reconcile unfinished and blocked tasks before reporting completion.
   the original host; the shared store format is retained for compatibility.
 - Other agents can use the CLI through a shell.
 
-## Storage and privacy
+## Storage
 
 ```text
 <project>/.steak-pi/todo/<sha256(JSON.stringify([sessionFile, sessionId]))>/
@@ -133,8 +133,26 @@ plan. An indicated Claude session with no unique transcript fails rather than
 silently selecting another plan. Separate agents share a list only when they
 resolve to the same project and owner. Stored files survive context compaction.
 
-The CLI makes no network calls. Installers and dependency installation do.
-Plans are plain files, not encrypted; keep sensitive content out of committed state.
+## Privacy
+
+`ut-todo` and the Pi tool make no network calls. They contain no telemetry,
+analytics, crash reporting, update checks or model API calls.
+
+The installers run only when you run them: they download the release archive
+and its SHA-256 checksum from GitHub, and download Node.js from nodejs.org with
+its checksum only if no suitable Node is installed. They send no usage data.
+Dependency installation (`npm install`) is also something you invoke.
+
+Plans are plain, unencrypted JSON and Markdown in
+`<project>/.steak-pi/todo/<hash>/`, in 0700 directories with 0600 files on
+POSIX systems. They
+hold only the phase names, task text and block reasons you write; there are no
+logs or transcripts. Delete one plan by removing its `<hash>` directory, or all
+plans for a project with `rm -rf .steak-pi/todo`. Keep secrets out of task text.
+
+The agent integrations are local files. Your agent or model provider may see
+plan text because you asked it to use the tool; UltraPlan does not contact any
+provider itself.
 
 ## Development
 

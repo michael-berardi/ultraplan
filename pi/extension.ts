@@ -53,6 +53,8 @@ function captureOwner(ctx: ExtensionContext, deps: PlanExtensionDeps): TodoOwner
 const STATE_DIR = ".steak-pi";
 const STATE_FILE = "todo.json";
 const MARKDOWN_FILE = "TODO.md";
+const PRIVATE_DIR_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
 const MAX_KNOWN_LABELS = 12;
 const TODO_STATUSES = new Set<TodoStatus>([
   "pending",
@@ -166,12 +168,21 @@ async function loadState(dir: string): Promise<TodoState> {
   return validateState(parsed);
 }
 
+/** Owner-only store. Also tightens directories written by older versions. */
+async function privateDirs(dir: string): Promise<void> {
+  const base = path.resolve(dir, "..", ".."); // <project>/.steak-pi
+  for (const target of [base, path.join(base, "todo"), dir]) {
+    await fs.mkdir(target, { recursive: true, mode: PRIVATE_DIR_MODE });
+    await fs.chmod(target, PRIVATE_DIR_MODE);
+  }
+}
+
 async function stageWrite(target: string, content: string): Promise<string> {
   const temporary = path.join(
     path.dirname(target),
     `.${path.basename(target)}.${process.pid}.${randomUUID()}.tmp`,
   );
-  await fs.writeFile(temporary, content, { encoding: "utf8", flag: "wx" });
+  await fs.writeFile(temporary, content, { encoding: "utf8", flag: "wx", mode: PRIVATE_FILE_MODE });
   return temporary;
 }
 
@@ -179,7 +190,7 @@ async function persist(dir: string, state: TodoState, output: string, check: () 
   check();
   const statePath = path.join(dir, STATE_FILE);
   const markdownPath = path.join(dir, MARKDOWN_FILE);
-  await fs.mkdir(dir, { recursive: true });
+  await privateDirs(dir);
 
   let stateTemp: string | undefined;
   let markdownTemp: string | undefined;
