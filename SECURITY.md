@@ -21,10 +21,11 @@ the release notes if they want to be.
 ## Scope
 
 The CLI stores plain JSON and Markdown under the project's `.steak-pi/todo/`
-directory. Its only network use is the daily update check on a terminal and
-`ut-todo update` (see docs/updates.md). Automatic session detection also reads
-local agent transcripts. Release installers download archives and checksums,
-and may download Node.js.
-Relevant reports include unintended writes outside the store, unsafe handling
-of a crafted store file or release archive, and command-line parsing that
-could execute input.
+directory. In interactive use it also makes one anonymous HTTPS request per
+day to this repository's public release record, and `ut-todo update` installs a
+newer release; see [docs/updates.md](docs/updates.md). Automatic session
+detection reads local agent transcripts. Release installers download archives
+and checksums, and may download Node.js.
+Relevant reports include unintended writes outside the store or cache, unsafe
+handling of a crafted store file or release archive, a release check that
+sends identifying data, and command-line parsing that could execute input.

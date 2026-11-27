@@ -27,4 +27,5 @@ plan under `.steak-pi/todo/` in this project and shares it with Steak Pi agents.
 ```
 
 That is the entire integration: the agent needs a shell and this file. The plan
-is local files only — nothing is sent anywhere.
+stays in local files; the CLI's only routine network use is an anonymous daily
+release check, which can be turned off with `UT_TODO_NO_UPDATE_CHECK=1`.

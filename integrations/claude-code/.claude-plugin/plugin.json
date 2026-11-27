@@ -1,8 +1,8 @@
 {
   "name": "ultraplan",
   "displayName": "UltraPlan",
-  "version": "0.5.2",
-  "description": "ut-todo: durable phased task progress for Claude Code. Phases in order, one active task, honest blocked states, shared with Steak Pi's native todo tool.",
+  "version": "0.5.4",
+  "description": "ut-todo: durable phased task progress for Claude Code. Phases in order, one active task, honest blocked states, shared with Steak Pi's native todo tool. Anonymous release notices; automatic install is opt-in.",
   "author": {
     "name": "Pareto Cybernetics"
   },

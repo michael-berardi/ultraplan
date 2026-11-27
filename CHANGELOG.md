@@ -3,6 +3,25 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.5.4 — 2026-11-26
+
+- Added [PRIVACY.md](PRIVACY.md): the complete inventory of every local write,
+  what it holds, how long it lives and what removes it. The README Privacy
+  section is a short summary that links to it; SECURITY.md and
+  `docs/updates.md` describe the same anonymous daily update check and its
+  opt-outs (`UT_TODO_NO_UPDATE_CHECK=1` or `ut-todo update --auto-check off`).
+- Added a silent local-data retention pass after successful commands: crash
+  staging (1 hour), stale plan locks (30 s), expired check claims (14 s), old
+  install logs (7 days), installer/wrapper staging (1 hour), and only the
+  tool's own temp folders (1 day). Plans, the update cache and your settings
+  are never touched; `ULTRAPLAN_NO_LOCAL_CLEANUP=1` skips the pass.
+- Closed the rollback-copy gap for installer swaps: the kept previous release
+  is retired after the replacing release has run successfully once, after a
+  restored release has itself run, or after seven days, whichever comes first.
+  A copy whose version cannot be attributed is still retired after seven days.
+- Aligned the package, lockfile, Claude Code plugin metadata and README install
+  example with version 0.5.4.
+
 ## 0.5.2 — 2026-11-26
 
 - `ut-todo --version` and `ut-todo version` print `ut-todo <version>` (read

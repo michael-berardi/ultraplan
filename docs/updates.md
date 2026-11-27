@@ -68,7 +68,7 @@ until the next day. Drafts, prereleases and tags that are not `x.y.z` are ignore
 Commands started at the same time share one check: the first one marks it in
 flight with an owner-only `update.claim` file, the others use the cached result
 instead of sending their own request, and the file is removed when the check
-ends. A claim left by a process that died is replaced after 14 seconds.
+ends. A claim left by a process that died is replaced after 14 s.
 
 It is off when output is not a terminal, when `CI` is set, in agent shells, with
 `ut-todo update --auto-check off`, or with `UT_TODO_NO_UPDATE_CHECK=1`.
@@ -85,3 +85,32 @@ completely, delete that folder along with the install folder and wrapper.
 For testing, `UT_TODO_UPDATE_API` points the check at another release record,
 `ULTRAPLAN_RELEASE_BASE` points the install at other release assets, and
 `ULTRAPLAN_CACHE_DIR` moves the state folder.
+
+
+## Local-data retention
+
+After a successful command, never inside one, `ut-todo` makes one bounded,
+silent pass over the paths it owns; a failure in that pass is ignored. It
+removes crash staging from the plan folder (1 hour), a stale plan lock (30 s),
+staging files in the update cache (1 hour), an expired claim (14 s), an install
+lock left by a dead update (10 minutes) and a background install log older
+than seven days. If a sweep overlaps a reclaim of the same expired claim it
+can also remove the new token; that check still finishes, but the next
+interactive command may start another. The command's result is never changed.
+
+Installer staging (`release-<version>.tmp`, `release-<version>.rollback.tmp`,
+`.staging-<guid>` and `<bin>/ut-todo.tmp.*`) is removed after 1 hour, and only
+`<tmp>/ut-todo-update-*`, `<tmp>/ultraplan-update-*` and
+`<tmp>/ultraplan-install.*` folders are removed after 1 day. Plans, the update
+cache and your settings are never touched. Set
+`ULTRAPLAN_NO_LOCAL_CLEANUP=1` to skip the pass and clean up by hand.
+
+Rollback copies (`<app>/release-<version>.previous`) are retained for rollback
+until the release the wrapper now names has run successfully once, or for seven
+days at most. The sweep also retires a copy when a restored release has itself
+run: the wrapper points at the restored release and this process is now running from that restored release, so the kept copies are redundant. Any copy older
+than seven days is retired even when its version cannot be attributed to a
+wrapper. `ut-todo update --rollback` still restores a kept copy
+before then. The full inventory, with every lifetime, is in
+[PRIVACY.md](../PRIVACY.md).
+

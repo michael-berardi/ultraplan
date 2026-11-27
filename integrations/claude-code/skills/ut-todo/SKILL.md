@@ -36,5 +36,15 @@ ut-todo view                                     # the checklist, plain text
 ut-todo json '{"op":"start","items":["a","b"]}'  # any native op, verbatim
 ```
 
-`--session NAME` keeps a separate list for a named session. The store is local
-files only; nothing ever leaves the machine.
+`--session NAME` keeps a separate list for a named session. Plans stay in local
+files. The only network request the CLI can make is the anonymous release check
+described in `docs/updates.md`; it never runs automatically in an agent session.
+
+## Updates in an agent session
+
+Do not print update notices inside `ut-todo json` output. If the operator asks
+about updates, or at session start when they want them, run
+`ut-todo update --check` once and relay its line in your reply:
+`ut-todo update --auto on` opts into automatic installs, `ut-todo update --skip`
+hides a version, and `ut-todo update` shows release notes and installs with
+confirmation.

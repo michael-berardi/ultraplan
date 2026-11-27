@@ -25,12 +25,14 @@ irm https://github.com/michael-berardi/ultraplan/releases/latest/download/instal
 
 The installers download the release archive and check its SHA-256. They
 use an existing Node.js 22.19+ or download Node into the tool's folder.
-To inspect before running, download the script and read it first.
+To inspect before running, download the script and read it first. These links
+use GitHub's `latest` release assets; the npm example below pins `v0.5.4`,
+the version of this release.
 
 With Node.js 22.19+ already installed, you can instead use npm:
 
 ```sh
-npm install --global github:michael-berardi/ultraplan#v0.5.2
+npm install --global github:michael-berardi/ultraplan#v0.5.4
 ```
 
 ### Updates
@@ -142,9 +144,10 @@ resolve to the same project and owner. Stored files survive context compaction.
 ## Privacy
 
 - Network: at most one anonymous update check a day on a terminal (off with `UT_TODO_NO_UPDATE_CHECK=1`), plus installs and updates you start.
-- No telemetry, analytics, accounts or identifiers.
-- Plans stay in `<project>/.steak-pi/todo/` as plain files, owner-only on macOS and Linux; delete that folder to remove them.
-- Details: [PRIVACY.md](PRIVACY.md).
+- No telemetry, analytics, accounts, identifiers or model API calls from UltraPlan.
+- Plans stay in `<project>/.steak-pi/todo/` as plain files, owner-only on macOS and Linux.
+- Delete local data: remove your plans, cache and config as listed in [PRIVACY.md](PRIVACY.md).
+- Details and cleanup: [docs/updates.md](docs/updates.md).
 
 ## Development
 
@@ -155,7 +158,8 @@ npm test
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md),
-[CHANGELOG.md](CHANGELOG.md), and the [MIT license](LICENSE).
+[PRIVACY.md](PRIVACY.md), [CHANGELOG.md](CHANGELOG.md), and the
+[MIT license](LICENSE).
 
 ---
 
