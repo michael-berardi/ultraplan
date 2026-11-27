@@ -5,7 +5,7 @@ one anonymous release check in interactive use, and ships no usage reporting,
 analytics, crash reporting or model API client. This page is the complete list
 of what it writes, where, for how long, and what removes it.
 
-## Nothing leaves your machine except the release check
+## Network traffic
 
 In interactive terminal use `ut-todo` makes at most one HTTPS GET per day to
 this repository's own public GitHub "latest release" record: a fixed
@@ -21,8 +21,11 @@ the command you are waiting for never blocks on it. See
 The installers download the release archive and its SHA-256 checksum from
 GitHub — and Node.js from nodejs.org with its checksum, only when no suitable
 Node is installed — when you run them. They send no usage data, and no tool
-they invoke reports usage either. Dependency installation (`npm install`) is
-something you invoke yourself.
+they invoke reports usage either. If you turn on automatic updates, the
+background worker downloads the release archive and its checksum from GitHub
+without waiting for a command, with the same anonymous request pattern and no
+usage data. Dependency installation (`npm install`) is something you invoke
+yourself.
 
 ## What is written, and for how long
 

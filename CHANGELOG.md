@@ -23,7 +23,7 @@ All notable changes to UltraPlan are documented here. The project uses
   `release-previous` release and the `.previous` command wrapper are now retired
   after the replacing release has run successfully once, after a release
   restored by `update --rollback` has itself run, or after seven days, whichever
-  comes first. A copy that cannot be attributed to a wrapper is never removed.
+  comes first. A copy that cannot be attributed to a wrapper is not removed early, but it still expires after seven days.
   The update check itself is unchanged; `update --auto off` still does not clear the
   recorded auto-ask answer, and that remaining gap is recorded in
   `docs/updates.md`.

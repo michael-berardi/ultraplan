@@ -241,7 +241,7 @@ describe("rollback copies (contract §4a)", () => {
     expect(existsSync(previousDir)).toBe(false);
   });
 
-  it("never removes a copy it cannot attribute to a wrapper", async () => {
+  it("keeps an unattributable copy until it expires", async () => {
     const dir = await tempDir();
     const { appDir, wrapper, backupFile, previousDir } = await fixture(dir, "0.5.4", "0.5.3");
     await fs.writeFile(wrapper, "#!/bin/sh\nexec node \"$HOME/elsewhere/ut-todo\" \"$@\"\n");
@@ -249,6 +249,11 @@ describe("rollback copies (contract §4a)", () => {
     expect((await retireRollbackCopies({ appDir, wrapper, selfPath })).retirement).toBe("kept");
     expect(existsSync(backupFile)).toBe(true);
     expect(existsSync(previousDir)).toBe(true);
+    const when = new Date(Date.now() - (ROLLBACK_MAX_AGE_MS + 60_000));
+    for (const target of [backupFile, previousDir]) await fs.utimes(target, when, when);
+    expect((await retireRollbackCopies({ appDir, wrapper, selfPath })).retirement).toBe("expired");
+    expect(existsSync(backupFile)).toBe(false);
+    expect(existsSync(previousDir)).toBe(false);
   });
 
   it("reports an absent rollback instead of inventing work", async () => {
