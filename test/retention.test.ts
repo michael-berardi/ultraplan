@@ -250,7 +250,7 @@ describe("rollback copies (contract §4a)", () => {
     expect(existsSync(backupFile)).toBe(true);
     expect(existsSync(previousDir)).toBe(true);
     const when = new Date(Date.now() - (ROLLBACK_MAX_AGE_MS + 60_000));
-    for (const target of [backupFile, previousDir]) await fs.utimes(target, when, when);
+    for (const target of [backupFile, previousDir, wrapper]) await fs.utimes(target, when, when);
     expect((await retireRollbackCopies({ appDir, wrapper, selfPath })).retirement).toBe("expired");
     expect(existsSync(backupFile)).toBe(false);
     expect(existsSync(previousDir)).toBe(false);
