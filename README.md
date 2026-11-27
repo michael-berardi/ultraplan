@@ -150,31 +150,13 @@ resolve to the same project and owner. Stored files survive context compaction.
 
 ## Privacy
 
-`ut-todo` and the Pi tool keep plans local and contain no telemetry,
-analytics, crash reporting or model API calls. Interactive CLI use makes at
-most one anonymous HTTPS GET per day to the repository's own public GitHub
-"latest release" record: a fixed user agent, no id, no installed version, no
-usage or machine data, a 4 s timeout and a cached result. Checks are off in
-CI, non-TTY and agent use; `ULTRAPLAN_NO_UPDATE_CHECK=1` or the config switch
-in [docs/updates.md](docs/updates.md) disables them. A failed check is only
-reported by `ut-todo update --check`. Installing is always explicit or
-opt-in.
-
-The installers run only when you run them: they download the release archive
-and its SHA-256 checksum from GitHub, and download Node.js from nodejs.org with
-its checksum only if no suitable Node is installed. They send no usage data.
-Dependency installation (`npm install`) is also something you invoke.
-
-Plans are plain, unencrypted JSON and Markdown in
-`<project>/.steak-pi/todo/<hash>/`, in 0700 directories with 0600 files on
-POSIX systems. They
-hold only the phase names, task text and block reasons you write; there are no
-logs or transcripts. Delete one plan by removing its `<hash>` directory, or all
-plans for a project with `rm -rf .steak-pi/todo`. Keep secrets out of task text.
-
-The agent integrations are local files. Your agent or model provider may see
-plan text because you asked it to use the tool; UltraPlan does not contact any
-provider itself.
+Plans stay local: plain JSON and Markdown in `<project>/.steak-pi/todo/<hash>/`,
+owner-only (0700/0600), with no usage reporting, analytics or model API calls
+in the tool. Interactive use makes at most one anonymous HTTPS GET per day to
+the public GitHub release record, cached for 24 h and off in CI, non-TTY and
+agent use or with `ULTRAPLAN_NO_UPDATE_CHECK=1`. Every local file, its lifetime
+and the automatic cleanup are listed in [PRIVACY.md](PRIVACY.md); the update
+contract is in [docs/updates.md](docs/updates.md).
 
 ## Development
 
@@ -185,7 +167,8 @@ npm test
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md),
-[CHANGELOG.md](CHANGELOG.md), and the [MIT license](LICENSE).
+[PRIVACY.md](PRIVACY.md), [CHANGELOG.md](CHANGELOG.md), and the
+[MIT license](LICENSE).
 
 ---
 

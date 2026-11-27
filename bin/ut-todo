@@ -594,9 +594,28 @@ if ("updateArgs" in parsed) {
     process.stderr.write(`ut-todo: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exit(error instanceof TodoError || error instanceof SyntaxError ? 2 : 1);
   }
+  // Retention runs after a successful command, never inside one, and never
+  // changes its result: stale staging files, an expired check claim, an old
+  // install log and — after the new release is proven — the rollback copies.
+  if (!process.exitCode) void sweepAfterRun(dir).catch(() => {});
   if (interactive(process.env, op.op)) {
     queueMicrotask(() => {
       void maybeAutoCheck(op.op).catch(() => {});
     });
+  }
+}
+
+/** Local-data retention; best-effort, silent, and never awaited by the command. */
+async function sweepAfterRun(storeDir) {
+  const env = { ...process.env };
+  if (env.ULTRAPLAN_NO_LOCAL_CLEANUP === "1") return;
+  try {
+    const lib = await updates();
+    const retention = await loadTs("../src/retention.ts");
+    const paths = lib.updatePaths(env);
+    const plan = lib.detectInstallKind(BIN_FILE, env);
+    await retention.sweepLocalData({ storeDir, selfPath: BIN_FILE, paths, plan, env });
+  } catch {
+    // A failed cleanup must never fail the command that triggered it.
   }
 }

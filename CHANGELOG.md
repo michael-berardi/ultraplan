@@ -3,12 +3,31 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.5.4 — 2026-11-26
 
-### Documentation
+### Privacy and local data
 
-- Recorded the contract §4a rollback gap in `docs/updates.md`: `release-previous` and the `.previous` wrapper are retained indefinitely with no first-run or seven-day cleanup and must be removed manually; `update --auto off` disables automatic installs but does not delete the rollback copies. No update behavior changed.
-- Confirmed that `v0.5.2` is a published GitHub release and pinned the README's npm example to it. The pending branch changes are numbered `0.5.3`; no README install command points at an unpublished tag.
+- Added [`PRIVACY.md`](PRIVACY.md): every path UltraPlan writes, what it holds,
+  how long it lives and what removes it, including the update cache, the
+  in-flight claim, the config, the install log, installer staging and the
+  rollback copies. The README Privacy section is now a short summary that links
+  to it, and `docs/updates.md` points at it instead of the README.
+- Added automatic local-data cleanup in `src/retention.ts`, run after a
+  successful command and never inside one: crashed staging files (1 hour), a
+  stale plan lock (30 s), an expired check claim (the check's own timeout plus
+  10 s), an old install log (7 days) and `ultraplan-*` folders in the system
+  temp directory (1 day). Plans, the update cache and the config are never
+  touched; `ULTRAPLAN_NO_LOCAL_CLEANUP=1` skips the pass.
+- Closed the contract §4a rollback gap for installer-managed swaps: the kept
+  `release-previous` release and the `.previous` command wrapper are now retired
+  after the replacing release has run successfully once, after a successful
+  `update --rollback` that restored them, or after seven days, whichever comes
+  first. A copy that cannot be attributed to a wrapper is never removed. The
+  update check itself is unchanged; `update --auto off` still does not clear the
+  recorded auto-ask answer, and that remaining gap is recorded in
+  `docs/updates.md`.
+- Recorded that `v0.5.2` is a published GitHub release and pinned the README's
+  npm example to it. No README install command points at an unpublished tag.
 
 ## 0.5.3 — 2026-11-26
 

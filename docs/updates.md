@@ -6,7 +6,7 @@ UltraPlan follows the open-source update contract: tell the user when a newer
 stable release exists, make updating one command, and never install anything
 without an explicit opt-in.
 
-At this revision the package version is `0.5.3`, while the newest published
+At this revision the package version is `0.5.4`, while the newest published
 GitHub release is `v0.5.2`. README install commands use that published release;
 release checks compare against published releases only, never an unpublished
 branch version. The example below shows the next version being offered to a
@@ -46,7 +46,7 @@ From the cached result, on a TTY only, after a normal command finishes (so a
 check started by one command is normally noticed on the next one):
 
 ```text
-ut-todo 0.5.3 available (you have 0.5.2) · run: ut-todo update
+ut-todo 0.5.4 available (you have 0.5.3) · run: ut-todo update
 turn on automatic updates: ut-todo update --auto on · skip: ut-todo update --skip
 ```
 
@@ -91,23 +91,41 @@ working, records the cause and falls back to the notice.
 Downloads come from the release's own assets. `SHA256SUMS` must match
 `ultraplan.tar.gz` before anything is unpacked; a mismatch installs nothing.
 The unpacked release is staged, health-checked and renamed into place, with
-the prior release and command wrapper kept as `.previous` for rollback.
+the prior release and command wrapper kept as `.previous` for rollback until
+the new release has run successfully once, or for seven days.
 npm-global installs are detected and updated with
 `npm install --global github:<owner>/<repo>#v<version>` rather than by
 overwriting files npm owns. Other install kinds print the matching command.
 
-### Known gap in contract §4a
+### Rollback copies and cleanup (contract §4a)
 
 Contract §4a asks for a rollback copy to be deleted after the new version has
-run successfully once, and at the latest within seven days; it also asks
-`update --auto off` to clear saved auto state. This build does **not** implement
-that cleanup. An installer-managed swap keeps `release-previous` and the
-`.previous` command wrapper **indefinitely**: there is no first-successful-run
-check and no seven-day expiry. Remove those copies manually when you no longer
-need them, or run `ut-todo update --rollback` to restore the previous release
-first. `ut-todo update --auto off` writes `autoInstall: false` to the config
-and stops future automatic installs, but it **does not delete the rollback
-copies** and does not start any timed cleanup.
+run successfully once, and at the latest within seven days. That cleanup is now
+automatic. After a successful command — never inside one, so it cannot change
+that command's result — `ut-todo` makes one bounded, silent pass over the paths
+it owns and retires `<app>/release-previous` together with the
+`<bin>/ut-todo.previous` wrapper when:
+
+- the release the wrapper now names has run successfully once, meaning the
+  running process started from that release and it is not the release the
+  wrapper backup points at;
+- `ut-todo update --rollback` restored the previous release and that restored
+  release has now run successfully, which makes the kept copies redundant;
+- or the copies are seven days old, whatever happened in between.
+
+A copy whose version cannot be attributed to a wrapper is **never** removed, so
+an unreadable or hand-edited wrapper keeps the rollback intact. The same pass
+also removes crashed staging (`release-<version>.tmp`,
+`release-<version>.rollback.tmp`, `.staging-<guid>`, `<bin>/ut-todo.tmp.*`)
+after 1 hour, an install log after 7 days, an expired check claim, and
+`ultraplan-*` folders in the system temp directory after 1 day. Plans, the
+update cache and your config are never touched, and
+`ULTRAPLAN_NO_LOCAL_CLEANUP=1` skips the pass. The full local-write inventory
+and its lifetimes are in [../PRIVACY.md](../PRIVACY.md).
+
+Remaining gap: `ut-todo update --auto off` writes `autoInstall: false` to the
+config and stops future automatic installs, but it does not clear the recorded
+`autoPrompted` answer or delete the rollback copies ahead of the rules above.
 
 ## Privacy
 
@@ -117,5 +135,6 @@ short-lived background child; there is no usage reporting, analytics, crash
 reporting or model API call.
 Installers run only when you run them or after you explicitly opt into
 automatic installs, and they verify checksums. Background install logs stay in
-the tool's own 0700 config directory. See the README Privacy section for
-details. The README keeps a detailed Privacy section rather than the contract's short form.
+the tool's own 0700 config directory. The README keeps a short Privacy section
+and links [../PRIVACY.md](../PRIVACY.md), which lists every local write, its
+lifetime and its automatic cleanup.
