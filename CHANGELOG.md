@@ -15,15 +15,16 @@ All notable changes to UltraPlan are documented here. The project uses
 - Added automatic local-data cleanup in `src/retention.ts`, run after a
   successful command and never inside one: crashed staging files (1 hour), a
   stale plan lock (30 s), an expired check claim (the check's own timeout plus
-  10 s), an old install log (7 days) and `ultraplan-*` folders in the system
-  temp directory (1 day). Plans, the update cache and the config are never
-  touched; `ULTRAPLAN_NO_LOCAL_CLEANUP=1` skips the pass.
+  10 s), an old install log (7 days), wrapper/installer staging (1 hour), and
+  only `ultraplan-update-*` and `ultraplan-install.*` folders in the system temp
+  directory (1 day). Plans, the update cache and the config are never touched;
+  `ULTRAPLAN_NO_LOCAL_CLEANUP=1` skips the pass.
 - Closed the contract §4a rollback gap for installer-managed swaps: the kept
   `release-previous` release and the `.previous` command wrapper are now retired
-  after the replacing release has run successfully once, after a successful
-  `update --rollback` that restored them, or after seven days, whichever comes
-  first. A copy that cannot be attributed to a wrapper is never removed. The
-  update check itself is unchanged; `update --auto off` still does not clear the
+  after the replacing release has run successfully once, after a release
+  restored by `update --rollback` has itself run, or after seven days, whichever
+  comes first. A copy that cannot be attributed to a wrapper is never removed.
+  The update check itself is unchanged; `update --auto off` still does not clear the
   recorded auto-ask answer, and that remaining gap is recorded in
   `docs/updates.md`.
 - Recorded that `v0.5.2` is a published GitHub release and pinned the README's

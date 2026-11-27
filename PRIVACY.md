@@ -29,7 +29,8 @@ something you invoke yourself.
 Plan files are plain, unencrypted JSON and Markdown. They hold only the phase
 names, task text and block reasons you write: no logs, no transcripts and no
 identifiers. Directories are 0700 and files 0600 on POSIX systems; older stores
-with looser permissions are tightened on the next write.
+with looser permissions are tightened on the next write. The roots below are
+UltraPlan's own folders; `<cache>` and `<config>` already include its name.
 
 | Path | Contents | Lifetime | What removes it |
 | --- | --- | --- | --- |
@@ -37,21 +38,27 @@ with looser permissions are tightened on the next write.
 | `.steak-pi/todo/<sha256>/TODO.md` | The rendered checklist, written just before the JSON | Until you change or delete the plan | Same as `todo.json` |
 | `.steak-pi/todo/<sha256>/.lock` | Empty marker: one writer at a time for that plan | One command; stale after 30 s | The command that created it, or the next writer / retention sweep after 30 s |
 | `.steak-pi/todo/<sha256>/.<name>.<pid>.<uuid>.tmp` | A staged copy of `todo.json` or `TODO.md` for an atomic write | Milliseconds | The writer's `finally`; a crash leftover after 1 hour |
-| `<cache>/ultraplan/update-check.json` | The last check result: latest version, note text, timestamps, failure cause | Replaced by the next check, at most daily; no expiry | You can delete it at any time; the next interactive check simply runs again |
-| `<cache>/ultraplan/update-check.claim` | A random token marking a check in flight | Seconds (4 s timeout plus 10 s) | The check that owns it, or the retention sweep once expired |
-| `<config>/ultraplan/config.json` | Your update choices: automatic checks, automatic installs, skipped version, auto-ask answered | Until you change it | `ut-todo update --auto`, `update --skip`, or deleting the file |
-| `<config>/ultraplan/logs/update.log` | Output of an opted-in background install; never plan text | Newest 256 KB only; dropped after 7 days | Trimmed around every background install; removed by the sweep after 7 days |
+| `<cache>/update-check.json` | The last check result: latest version, note text, timestamps, failure cause | Replaced by the next check, at most daily; no expiry | You can delete it at any time; the next interactive check simply runs again |
+| `<cache>/update-check.claim` | A random token marking a check in flight | 14 s (4 s timeout plus 10 s) | The check that owns it, or the next check / retention sweep once expired (see below) |
+| `<config>/config.json` | Your update choices: automatic checks, automatic installs, skipped version, auto-ask answered | Until you change it | `ut-todo update --auto`, `update --skip`, or deleting the file |
+| `<config>/logs/update.log` | Output of an opted-in background install; never plan text | Newest 256 KB only; dropped after 7 days | Trimmed around every background install; removed by the sweep after 7 days |
 | `<app>/release-<version>.tmp`, `<app>/release-<version>.rollback.tmp` | A verified release tree being staged or rolled back | One install | Renamed into place by the install; a crash leftover after 1 hour |
 | `<app>/.staging-<guid>` | A Windows installer's download and unpack folder | One install | The installer; a crash leftover after 1 hour |
+| `<bin>/ut-todo.tmp.*` | A command wrapper staged during an install | Milliseconds | Renamed into place by the installer; a crash leftover after 1 hour |
 | `<app>/release-previous`, `<bin>/ut-todo.previous` | The release and command wrapper kept for `ut-todo update --rollback` | Until the replacing release has run successfully once, and at most 7 days | The retention sweep (see below), or `update --rollback` first |
 | `<tmp>/ultraplan-update-*`, `<tmp>/ultraplan-install.*` | Downloaded archive, checksums and unpacked tree for one install | One install | The install's own `finally`; a crash leftover after 1 day |
 
-`<cache>`, `<config>`, `<app>`, `<bin>` and `<tmp>` are the platform folders
-`ut-todo` already documents: `~/Library/Caches/ultraplan` and
-`~/Library/Application Support/ultraplan` on macOS, the `XDG_*` folders on
-Linux, and the `LocalAppData`/`AppData` folders on Windows, plus the tool's own
-install folder and the system temp folder. `ULTRAPLAN_CACHE_DIR`,
-`ULTRAPLAN_CONFIG_DIR`, `ULTRAPLAN_HOME` and `ULTRAPLAN_BIN_DIR` override them.
+`<cache>` is UltraPlan's cache folder: `~/Library/Caches/ultraplan` on macOS,
+`$XDG_CACHE_HOME/ultraplan` (or `~/.cache/ultraplan`) on Linux, and
+`%LOCALAPPDATA%\ultraplan\cache` on Windows. `<config>` is its config folder:
+`~/Library/Application Support/ultraplan`, `$XDG_CONFIG_HOME/ultraplan` (or
+`~/.config/ultraplan`), and `%APPDATA%\ultraplan` respectively. `<app>` is the
+installer's application folder (`$ULTRAPLAN_HOME/app`, by default
+`~/.ultraplan/app` or `%LOCALAPPDATA%\UltraPlan\app`), and `<bin>` is the folder
+holding the `ut-todo` wrapper (`$ULTRAPLAN_BIN_DIR`, by default `~/.local/bin`
+or the Windows installer's `bin` folder). `<tmp>` is the system temp folder.
+`ULTRAPLAN_CACHE_DIR`, `ULTRAPLAN_CONFIG_DIR`, `ULTRAPLAN_HOME` and
+`ULTRAPLAN_BIN_DIR` override these locations.
 
 Nothing else is written. There is no usage counter, no history of commands, no
 copy of a plan outside its project folder and no log of plan text.
@@ -70,14 +77,20 @@ The pass removes:
 - staging files and a stale lock in the plan folder that command used;
 - a staging file in the update cache, an expired in-flight claim, and an
   install log older than 7 days;
-- installer staging folders and release staging older than 1 hour, plus
-  `ultraplan-*` folders in the system temp folder older than 1 day;
+- installer staging folders, wrapper staging and release staging older than
+  1 hour, plus `<tmp>/ultraplan-update-*` and `<tmp>/ultraplan-install.*`
+  folders older than 1 day — no other temp entries are touched;
 - the rollback copies — `<app>/release-previous` and `<bin>/ut-todo.previous` —
   in the three cases the update contract (§4a) names: the release the wrapper
   now names has run successfully once (this process is running from it), the
-  wrapper was restored by `ut-todo update --rollback` and that restored release
-  has now run successfully, or the copies are 7 days old. A copy whose version
-  cannot be attributed to a wrapper is never removed.
+  wrapper was restored by `ut-todo update --rollback` and this process is now
+  running from that restored release, or the copies are 7 days old. A copy
+  whose version cannot be attributed to a wrapper is never removed.
+
+Claim removal is age-based: the sweep removes a claim only when it is at least
+14 s old. If that sweep overlaps a check reclaiming the same expired claim, it
+can also remove the new token; that check finishes, but the next interactive
+command can start another. The command's own result is never changed.
 
 Set `ULTRAPLAN_NO_LOCAL_CLEANUP=1` to skip this pass entirely and clean up by
 hand. `ut-todo update --rollback` still restores the previous release until the
@@ -93,9 +106,9 @@ because you asked it to use the tool. UltraPlan itself contacts no provider.
 
 - One plan: remove its `<project>/.steak-pi/todo/<sha256>/` folder.
 - All plans for a project: `rm -rf .steak-pi/todo`.
-- Update cache and claims: delete `<cache>/ultraplan/`.
-- Update preferences: delete `<config>/ultraplan/`, or run
-  `ut-todo update --auto off` to stop automatic installs.
+- Update cache and claims: delete `<cache>/`.
+- Update preferences: delete `<config>/`, or run `ut-todo update --auto off`
+  to stop automatic installs.
 - An installer-managed copy: run the installer's uninstall steps in the README
   (delete the install folder and its command wrapper).
 - An npm copy: `npm uninstall --global ultraplan`.

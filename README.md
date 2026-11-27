@@ -150,13 +150,12 @@ resolve to the same project and owner. Stored files survive context compaction.
 
 ## Privacy
 
-Plans stay local: plain JSON and Markdown in `<project>/.steak-pi/todo/<hash>/`,
-owner-only (0700/0600), with no usage reporting, analytics or model API calls
-in the tool. Interactive use makes at most one anonymous HTTPS GET per day to
-the public GitHub release record, cached for 24 h and off in CI, non-TTY and
-agent use or with `ULTRAPLAN_NO_UPDATE_CHECK=1`. Every local file, its lifetime
-and the automatic cleanup are listed in [PRIVACY.md](PRIVACY.md); the update
-contract is in [docs/updates.md](docs/updates.md).
+Plans stay local as plain JSON and Markdown, with no usage reporting, analytics
+or model API calls. Interactive use makes at most one anonymous HTTPS GET per
+day to the public GitHub release record, cached for 24 h and off in CI, non-TTY,
+agent use or with `ULTRAPLAN_NO_UPDATE_CHECK=1`. To delete local data, remove
+your plans, cache and config as listed in [PRIVACY.md](PRIVACY.md); it gives
+every path, its lifetime and cleanup. See [docs/updates.md](docs/updates.md).
 
 ## Development
 

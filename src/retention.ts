@@ -5,9 +5,11 @@
  * inventory of them (`LOCAL_WRITES`) and the sweep that keeps every one of
  * those paths free of debris: staging files left by a crash, a plan lock left
  * by a dead writer, an expired in-flight claim, an old install log, installer
- * staging folders, unpack folders in the system temp directory, and — once the
- * replacing release has run successfully (open-source update contract §4a) or
- * at the latest after seven days — the rollback copies a swap keeps.
+ * and wrapper staging folders, only `ultraplan-update-*` and
+ * `ultraplan-install.*` folders in the system temp directory, and — once the
+ * replacing or restored release has run successfully (open-source update
+ * contract §4a) or at the latest after seven days — the rollback copies a
+ * swap keeps.
  *
  * Rules the sweep obeys, so a cleanup can never become the incident:
  * - it never creates a directory, so an unused install stays untouched;
@@ -83,25 +85,25 @@ export const LOCAL_WRITES: readonly LocalWrite[] = [
     cleanup: "Removed in the writer's `finally`; a leftover from a crash is swept after 1 hour.",
   },
   {
-    paths: ["<cache>/ultraplan/update-check.json"],
+    paths: ["<cache>/update-check.json"],
     contents: "The last release-check result: latest version, note text, timestamps, failure cause. No id, no install id, no usage data.",
     lifetime: "Until the next check replaces it (at most once a day); no expiry.",
     cleanup: "Yours to delete at any time; deleting it only makes the next interactive check run.",
   },
   {
-    paths: ["<cache>/ultraplan/update-check.claim"],
+    paths: ["<cache>/update-check.claim"],
     contents: "A random token marking a check in flight, so parallel commands reuse one check.",
-    lifetime: "Seconds: the check's 4 s timeout plus 10 s.",
+    lifetime: "14 s: the check's 4 s timeout plus 10 s.",
     cleanup: "Removed by the check that owns it; an expired claim is reclaimed by the next check or this sweep.",
   },
   {
-    paths: ["<config>/ultraplan/config.json"],
+    paths: ["<config>/config.json"],
     contents: "Your update choices: automatic checks, automatic installs, skipped version, whether the auto-install question was answered.",
     lifetime: "Until you change it with `ut-todo update --auto`, `--skip`, or delete the file.",
     cleanup: "Yours; uninstalling removes it.",
   },
   {
-    paths: ["<config>/ultraplan/logs/update.log"],
+    paths: ["<config>/logs/update.log"],
     contents: "Output of an opted-in background install. Never plan text.",
     lifetime: "Newest 256 KB only; dropped after 7 days.",
     cleanup: "Trimmed before and after every background install; removed by this sweep after 7 days.",
@@ -117,6 +119,12 @@ export const LOCAL_WRITES: readonly LocalWrite[] = [
     contents: "A Windows installer's download and unpack folder, inside the tool's own home.",
     lifetime: "The duration of one install.",
     cleanup: "Removed by the installer; a leftover from a crash is swept after 1 hour.",
+  },
+  {
+    paths: ["<bin>/ut-todo.tmp.*"],
+    contents: "A command wrapper staged during an install, written beside the live wrapper.",
+    lifetime: "Milliseconds; renamed into place by the installer.",
+    cleanup: "Renamed by the installer; a leftover from a crash is swept after 1 hour.",
   },
   {
     paths: ["<app>/release-previous", "<bin>/ut-todo.previous"],
@@ -289,8 +297,8 @@ function isInside(dir: string, target: string): boolean {
  * once the release they replaced has proved itself. They go when
  * - this process is running from the release the wrapper now names, and that
  *   release is not the one in `<wrapper>.previous` (`ran-successfully`),
- * - the wrapper was restored from the backup and that restored release has now
- *   run successfully (`restored`),
+ * - the wrapper was restored from the backup and this process is running from
+ *   that restored release (`restored`),
  * - or they are seven days old (`expired`).
  *
  * Anything else is kept: an unreadable wrapper, a foreign wrapper, a copy whose
@@ -324,7 +332,10 @@ export async function retireRollbackCopies(options: {
   else if (currentRelease && backupRelease && currentRelease !== backupRelease
     && options.selfPath && isInside(path.join(options.appDir, currentRelease), options.selfPath)) {
     retirement = "ran-successfully";
-  } else if (currentRelease && backupRelease && currentRelease === backupRelease) retirement = "restored";
+  } else if (currentRelease && backupRelease && currentRelease === backupRelease
+    && options.selfPath && isInside(path.join(options.appDir, currentRelease), options.selfPath)) {
+    retirement = "restored";
+  }
 
   if (!retirement) return { retirement: "kept", removed: [] };
   const removed: string[] = [];

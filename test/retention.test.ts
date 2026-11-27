@@ -12,6 +12,7 @@ import {
   STALE_LOCK_MS,
   STAGING_MAX_AGE_MS,
   TEMP_DIR_MAX_AGE_MS,
+  TEMP_DIR_PREFIXES,
   retireRollbackCopies,
   sweepInstallArea,
   sweepLocalData,
@@ -214,10 +215,18 @@ describe("rollback copies (contract §4a)", () => {
     expect(existsSync(previousDir)).toBe(true);
   });
 
-  it("retires them after a successful rollback, because the restored copy is then redundant", async () => {
+  it("keeps them until the restored release, not the rollback command, has run", async () => {
     const dir = await tempDir();
-    const { appDir, wrapper, backupFile, previousDir } = await fixture(dir, "0.5.3", "0.5.3");
-    expect((await retireRollbackCopies({ appDir, wrapper })).retirement).toBe("restored");
+    const { appDir, wrapper, selfPath, backupFile, previousDir } = await fixture(dir, "0.5.3", "0.5.3");
+    const fromReplacedRelease = await plant(path.join(appDir, "release-0.5.4", "bin", "ut-todo"), "new");
+    expect((await retireRollbackCopies({ appDir, wrapper, selfPath: fromReplacedRelease })).retirement)
+      .toBe("kept");
+    expect((await retireRollbackCopies({ appDir, wrapper })).retirement).toBe("kept");
+    expect(existsSync(backupFile)).toBe(true);
+    expect(existsSync(previousDir)).toBe(true);
+
+    const state = await retireRollbackCopies({ appDir, wrapper, selfPath });
+    expect(state).toEqual({ retirement: "restored", removed: [backupFile, previousDir] });
     expect(existsSync(backupFile)).toBe(false);
     expect(existsSync(previousDir)).toBe(false);
   });
@@ -355,8 +364,38 @@ describe("the privacy document matches the code", () => {
 
   it("documents every path the inventory names", () => {
     const paths = LOCAL_WRITES.flatMap((entry) => entry.paths);
-    expect(paths.length).toBeGreaterThanOrEqual(12);
+    expect(paths.length).toBeGreaterThanOrEqual(14);
+    expect(paths).toContain("<bin>/ut-todo.tmp.*");
     expect(paths.filter((entry) => !privacy.includes(entry))).toEqual([]);
+  });
+
+  it("defines its path roots without repeating ultraplan inside them", () => {
+    for (const root of ["<cache>", "<config>", "<app>", "<bin>", "<tmp>"]) {
+      expect(privacy).toContain(`\`${root}\` is`);
+    }
+    expect(privacy).toContain("<cache>/update-check.json");
+    expect(privacy).toContain("<config>/config.json");
+    expect(privacy).not.toContain("<cache>/ultraplan/");
+    expect(privacy).not.toContain("<config>/ultraplan/");
+  });
+
+  it("names only the two temp prefixes the sweep uses", () => {
+    expect(TEMP_DIR_PREFIXES).toEqual(["ultraplan-update-", "ultraplan-install."]);
+    expect(privacy).toContain("<tmp>/ultraplan-update-*");
+    expect(privacy).toContain("<tmp>/ultraplan-install.*");
+    expect(privacy).not.toMatch(/`ultraplan-\*` folders/);
+    const updates = readFileSync(path.join(ROOT, "docs", "updates.md"), "utf8");
+    expect(updates).toContain("<tmp>/ultraplan-update-*");
+    expect(updates).toContain("<tmp>/ultraplan-install.*");
+    expect(updates).not.toMatch(/`ultraplan-\*` folders/);
+  });
+
+  it("states the claim's age and its overlap with an in-flight reclaim", () => {
+    expect(privacy).toContain("14 s old");
+    expect(privacy).toMatch(/overlaps a check reclaiming/);
+    const updates = readFileSync(path.join(ROOT, "docs", "updates.md"), "utf8");
+    expect(updates).toContain("14 s");
+    expect(updates).toMatch(/overlaps a reclaim/);
   });
 
   it("gives every inventory row a lifetime and a cleanup owner", () => {
@@ -372,11 +411,21 @@ describe("the privacy document matches the code", () => {
     const section = readme.slice(readme.indexOf("## Privacy\n"), readme.indexOf("## Development\n"));
     const lines = section.split("\n").slice(1).filter((line) => line.trim() !== "");
     expect(lines.length).toBeGreaterThanOrEqual(3);
-    expect(lines.length).toBeLessThanOrEqual(7);
+    expect(lines.length).toBeLessThanOrEqual(6);
+    expect(section).not.toContain("0700/0600");
+    expect(section).not.toContain(".steak-pi/todo/");
+    expect(section).toMatch(/[Dd]elete local data/);
+    expect(section).toMatch(/remove\s+your plans, cache and config/);
     expect(section).toContain("[PRIVACY.md](PRIVACY.md)");
     expect(section).toContain("[docs/updates.md](docs/updates.md)");
     expect(privacy).toContain("ULTRAPLAN_NO_LOCAL_CLEANUP=1");
     expect(privacy).toMatch(/(?:seven|7) days/);
+  });
+
+  it("requires the restored release itself, not just the rollback command, before deleting copies", () => {
+    expect(privacy).toMatch(/this process is now\s+running from that restored release/);
+    const updates = readFileSync(path.join(ROOT, "docs", "updates.md"), "utf8");
+    expect(updates).toMatch(/this process\s+is now running from that restored release/);
   });
 
   it("records the automatic rollback cleanup in the update contract", () => {

@@ -32,8 +32,11 @@ creates an owner-only in-flight claim and launches a detached, unref'd,
 low-priority child (`nice -n 10` on POSIX, plain runtime on Windows, with a
 fallback when `nice` is absent) to do the check and clear its claim. Rapid
 invocations that see a fresh claim reuse that check instead of starting
-another. An orphaned claim older than the 4 s timeout plus 10 s is reclaimed.
-The explicit `ut-todo update --check` remains synchronous.
+another. An orphaned claim older than the 4 s timeout plus 10 s (14 s) is
+reclaimed. The retention pass is age-based too, so if it overlaps a reclaim of
+the same expired claim it can remove the new claim; that check still finishes,
+but the next interactive command may start another. The explicit
+`ut-todo update --check` remains synchronous.
 
 Automatic checks are off outside a human interactive terminal: no TTY, `CI`
 set, or an agent/headless host. `ULTRAPLAN_NO_UPDATE_CHECK=1` or
@@ -109,17 +112,19 @@ it owns and retires `<app>/release-previous` together with the
 - the release the wrapper now names has run successfully once, meaning the
   running process started from that release and it is not the release the
   wrapper backup points at;
-- `ut-todo update --rollback` restored the previous release and that restored
-  release has now run successfully, which makes the kept copies redundant;
+- `ut-todo update --rollback` restored the previous release and this process
+  is now running from that restored release, which makes the kept copies
+  redundant;
 - or the copies are seven days old, whatever happened in between.
 
 A copy whose version cannot be attributed to a wrapper is **never** removed, so
 an unreadable or hand-edited wrapper keeps the rollback intact. The same pass
 also removes crashed staging (`release-<version>.tmp`,
 `release-<version>.rollback.tmp`, `.staging-<guid>`, `<bin>/ut-todo.tmp.*`)
-after 1 hour, an install log after 7 days, an expired check claim, and
-`ultraplan-*` folders in the system temp directory after 1 day. Plans, the
-update cache and your config are never touched, and
+after 1 hour, an install log after 7 days, an expired check claim, and only
+`<tmp>/ultraplan-update-*` and `<tmp>/ultraplan-install.*` folders in the system
+temp directory after 1 day. Plans, the update cache and your config are never
+touched, and
 `ULTRAPLAN_NO_LOCAL_CLEANUP=1` skips the pass. The full local-write inventory
 and its lifetimes are in [../PRIVACY.md](../PRIVACY.md).
 
