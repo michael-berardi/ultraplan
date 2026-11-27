@@ -117,8 +117,9 @@ it owns and retires `<app>/release-previous` together with the
   redundant;
 - or the copies are seven days old, whatever happened in between.
 
-A copy whose version cannot be attributed to a wrapper is **never** removed, so
-an unreadable or hand-edited wrapper keeps the rollback intact. The same pass
+A copy whose version cannot be attributed to a wrapper is not removed early; it
+still expires after seven days, so an unreadable or hand-edited wrapper cannot
+keep a rollback indefinitely. The same pass
 also removes crashed staging (`release-<version>.tmp`,
 `release-<version>.rollback.tmp`, `.staging-<guid>`, `<bin>/ut-todo.tmp.*`)
 after 1 hour, an install log after 7 days, an expired check claim, and only

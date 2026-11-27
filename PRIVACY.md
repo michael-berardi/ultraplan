@@ -85,7 +85,7 @@ The pass removes:
   now names has run successfully once (this process is running from it), the
   wrapper was restored by `ut-todo update --rollback` and this process is now
   running from that restored release, or the copies are 7 days old. A copy
-  whose version cannot be attributed to a wrapper is never removed.
+  whose version cannot be attributed to a wrapper is not removed early; it still expires after 7 days.
 
 Claim removal is age-based: the sweep removes a claim only when it is at least
 14 s old. If that sweep overlaps a check reclaiming the same expired claim, it
