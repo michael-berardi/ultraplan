@@ -224,9 +224,11 @@ export async function sweepPlanStore(storeDir: string, now = Date.now()): Promis
 }
 
 /** The update cache, its in-flight claim and the install log. */
+const UPDATE_CACHE_TMP_RE = /^\.update-check\.json\.\d+\..+\.tmp$/;
+
 export async function sweepUpdateFiles(paths: UpdatePaths, now = Date.now()): Promise<string[]> {
   return [
-    ...await removeStale(path.dirname(paths.cacheFile), stagingName, STAGING_MAX_AGE_MS, now),
+    ...await removeStale(path.dirname(paths.cacheFile), (name) => UPDATE_CACHE_TMP_RE.test(name), STAGING_MAX_AGE_MS, now),
     ...await removeIfOlderThan(paths.claimFile, CHECK_CLAIM_MAX_MS, now),
     ...await removeIfOlderThan(path.join(paths.logDir, INSTALL_LOG_NAME), INSTALL_LOG_MAX_AGE_MS, now),
   ];

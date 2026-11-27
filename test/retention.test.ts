@@ -115,6 +115,14 @@ describe("update cache, claim and log", () => {
     expect(existsSync(cacheFile)).toBe(true);
   });
 
+  it("does not sweep unrelated temporary files from a user-chosen cache folder", async () => {
+    const dir = await tempDir();
+    const { paths } = updateFixture(dir);
+    const unrelated = await plant(path.join(path.dirname(paths.cacheFile), ".notes.json.9.dead.tmp"), "x", older(STAGING_MAX_AGE_MS));
+    expect(await sweepUpdateFiles(paths)).toEqual([]);
+    expect(existsSync(unrelated)).toBe(true);
+  });
+
   it("keeps a fresh claim, a fresh staging file and a recent log", async () => {
     const dir = await tempDir();
     const { paths } = updateFixture(dir);

@@ -33,7 +33,7 @@ Plan files are plain, unencrypted JSON and Markdown. They hold only the phase
 names, task text and block reasons you write: no logs, no transcripts and no
 identifiers. Directories are 0700 and files 0600 on POSIX systems; older stores
 with looser permissions are tightened on the next write. The roots below are
-UltraPlan's own folders; `<cache>` and `<config>` already include its name.
+the roots UltraPlan uses; `<cache>` and `<config>` already include its name. A user-chosen cache root may hold other files: the sweep only matches UltraPlan's exact `.update-check.json.<pid>.<uuid>.tmp` staging name there.
 
 | Path | Contents | Lifetime | What removes it |
 | --- | --- | --- | --- |
