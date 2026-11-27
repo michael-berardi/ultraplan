@@ -118,4 +118,4 @@ reporting or model API call.
 Installers run only when you run them or after you explicitly opt into
 automatic installs, and they verify checksums. Background install logs stay in
 the tool's own 0700 config directory. See the README Privacy section for
-details.
+details. The README keeps a detailed Privacy section rather than the contract's short form.
