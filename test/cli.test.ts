@@ -137,6 +137,7 @@ describe("installed under node_modules", () => {
     await fs.copyFile(new URL("../bin/ut-todo", import.meta.url), path.join(pkg, "bin", "ut-todo"));
     await fs.copyFile(new URL("../src/core.ts", import.meta.url), path.join(pkg, "src", "core.ts"));
     await fs.copyFile(new URL("../src/update.js", import.meta.url), path.join(pkg, "src", "update.js"));
+    await fs.copyFile(new URL("../src/retention.ts", import.meta.url), path.join(pkg, "src", "retention.ts"));
     await fs.writeFile(path.join(pkg, "package.json"), JSON.stringify({
       type: "module", version: "0.5.0",
       repository: { url: "git+https://github.com/michael-berardi/ultraplan.git" },
@@ -153,5 +154,17 @@ describe("installed under node_modules", () => {
     });
     expect(stdout).toContain("1. Build (0/2)");
     expect(stderr).toBe("");
+
+    // The local-data sweep loads the same way: a crash leftover in the plan folder goes after the next command.
+    const todoRoot = path.join(cwd, ".steak-pi", "todo");
+    const store = path.join(todoRoot, (await fs.readdir(todoRoot))[0]);
+    const leftover = path.join(store, ".todo.json.1.crashed.tmp");
+    await fs.writeFile(leftover, "x");
+    const hourAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await fs.utimes(leftover, hourAgo, hourAgo);
+    const view = await run(exec, [path.join(pkg, "bin", "ut-todo"), "view"], { cwd, env: clean, encoding: "utf8", timeout: 30000 });
+    expect(view.stderr).toBe("");
+    expect(existsSync(leftover)).toBe(false);
+    expect((await fs.readdir(store)).sort()).toEqual(["TODO.md", "todo.json"]);
   });
 });

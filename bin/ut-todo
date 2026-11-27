@@ -80,9 +80,6 @@ const USAGE = `ut-todo — durable phased task progress for any agent with a she
   ut-todo update [--check|--skip]       # newer release; see ut-todo update --help
   ut-todo --version                     # print the installed version (also: ut-todo version)
 
-  ut-todo update --check                # report only: 0 current, 10 available, 1 failed
-  ut-todo update [--skip [VERSION]|--auto on|off|status|--rollback]
-
 One store per project directory, shared with Steak Pi's native todo tool:
 <cwd>/.steak-pi/todo/<hash>/{todo.json,TODO.md}. Plans stay in local files; on a
 terminal, ut-todo checks for a newer release once a day.`;

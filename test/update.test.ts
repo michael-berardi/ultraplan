@@ -25,7 +25,8 @@ import {
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const exec = promisify(execFile);
 const TTY = { stdout: { isTTY: true }, stderr: { isTTY: true } };
-const PACKAGE_FILES = ["bin/ut-todo", "src/core.ts", "src/render.ts", "src/update.js", "src/update.d.ts"];
+// Every runtime file the CLI loads, so installed copies run the same local-data sweep as a release.
+const PACKAGE_FILES = ["bin/ut-todo", "src/core.ts", "src/render.ts", "src/retention.ts", "src/update.js", "src/update.d.ts"];
 
 const cleanup: Array<() => unknown> = [];
 afterEach(async () => {
@@ -411,6 +412,28 @@ describe("install, rollback and debris", () => {
     const next = { ...env, ULTRAPLAN_RELEASE_BASE: `${server.url}/assets-0.7.0` };
     expect((await cli(fixture.bin("0.6.0"), ["update"], next)).status).toBe(0);
     expect(readdirSync(fixture.app).sort()).toEqual(["release-0.7.0", "release-0.7.0.previous"]);
+  });
+
+  it("the local-data sweep retires the rollback copy even when update.json was deleted", async () => {
+    const root = tempDir();
+    const fixture = installFixture(root);
+    makeRelease(root, "0.6.0");
+    const server = await releaseServer(root, { current: { tag_name: "v0.6.0" } });
+    const env = baseEnv(root, { UT_TODO_UPDATE_API: `${server.url}/api`, ULTRAPLAN_RELEASE_BASE: `${server.url}/assets-0.6.0` });
+    expect((await cli(fixture.bin(CURRENT), ["update"], env)).status).toBe(0);
+    expect(readdirSync(fixture.app).sort()).toEqual(["release-0.6.0", "release-0.6.0.previous"]);
+    // Without the record the update module's own pruning has nothing to act on; only the sweep can retire the copy.
+    rmSync(statePath(env));
+    const work = path.join(root, "work");
+    mkdirSync(work);
+    const optedOut = await cli(fixture.bin("0.6.0"), ["init", "Build:a"], { ...env, ULTRAPLAN_NO_LOCAL_CLEANUP: "1" }, work);
+    expect(optedOut).toMatchObject({ status: 0, stderr: "" });
+    expect(readdirSync(fixture.app).sort()).toEqual(["release-0.6.0", "release-0.6.0.previous"]);
+    const swept = await cli(fixture.bin("0.6.0"), ["view"], env, work);
+    expect(swept).toMatchObject({ status: 0, stderr: "" });
+    expect(swept.stdout).toContain("1. Build (0/1)");
+    expect(readdirSync(fixture.app)).toEqual(["release-0.6.0"]);
+    expect(readFileSync(fixture.shim, "utf8")).toContain("release-0.6.0/bin/ut-todo");
   });
 
   it("removes the rollback copy after 7 days even if the new version never ran", () => {

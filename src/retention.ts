@@ -2,26 +2,27 @@
  * UltraPlan local-data retention.
  *
  * This module is the single inventory of the local files UltraPlan writes
- * (LOCAL_WRITES) and the sweep that keeps every one of those paths free of
- * debris: staging files left by a crash, a plan lock left by a dead writer, an
- * expired check claim, a stale install lock, an old install log, installer and
- * wrapper staging folders, only the tool's own folders in the system temp
- * directory, and — once a replacing or restored release has run successfully
- * (open-source update contract §4a), or at the latest after seven days — the
- * rollback copies an installer swap keeps.
+ * (LOCAL_WRITES, rendered in PRIVACY.md) and the sweep that keeps those paths
+ * free of debris: staging files left by a crash, a plan lock left by a dead
+ * writer, an expired check claim, a stale install lock, an old install log,
+ * installer and wrapper staging, only the tool's own folders in the system temp
+ * directory, and — once the replacing release has run a command (update
+ * contract §4a), or at the latest seven days after the swap — the rollback copy
+ * an update keeps.
  *
  * Rules the sweep obeys, so a cleanup can never become the incident:
  * - it never creates a directory, so an unused install stays untouched;
- * - it never removes a plan (`todo.json`, `TODO.md`), the update cache or the
- *   settings: those are live state, not debris;
- * - it never removes a file younger than that file's stated lifetime;
- * - it only touches paths this tool owns;
+ * - it never removes a plan (`todo.json`, `TODO.md`), the update state or a
+ *   live release: those are state, not debris;
+ * - it never removes debris younger than that entry's stated lifetime;
+ * - it only matches names this tool itself writes;
  * - it prints nothing and never throws: a failed cleanup must never fail the
  *   command that triggered it.
  *
- * Paths are passed in from the CLI, which uses the main update module's own
- * `cacheDir` and `detectInstall`; this module has no dependency on the update
- * implementation so it also loads from the CLI's TypeScript loader.
+ * Paths are passed in from the CLI, which takes them from the update module's
+ * own `cacheDir` and `detectInstall` (src/update.js). This module imports
+ * nothing from it, so the CLI can also load it from memory after stripping its
+ * types (an npm global install under node_modules).
  *
  * `ULTRAPLAN_NO_LOCAL_CLEANUP=1` skips the sweep entirely.
  */
@@ -33,18 +34,22 @@ import * as path from "node:path";
 export const STAGING_MAX_AGE_MS = 60 * 60 * 1_000;
 /** A plan-store lock is stale after this long, exactly like the CLI writer's own lock. */
 export const STALE_LOCK_MS = 30_000;
-/** Contract §4a: rollback copies live at most this long, even with no successful run. */
+/** Contract §4a: a rollback copy lives at most this long, even with no successful run. */
 export const ROLLBACK_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 /** The background install log is diagnostic only, so it is dropped after this long. */
 export const INSTALL_LOG_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
-/** An in-flight check claim is stale after the main module's 4 s timeout plus slack. */
+/** An in-flight check claim is stale after the update module's 4 s timeout plus 10 s (CLAIM_STALE_MS). */
 export const CHECK_CLAIM_MAX_MS = 14_000;
-/** A stale update-install lock is reclaimed after the main module's 10-minute limit. */
+/** A stale update-install lock is reclaimed after the update module's 10-minute limit. */
 export const INSTALL_LOCK_MAX_MS = 10 * 60 * 1_000;
 /** Nothing the tool leaves in the system temp directory outlives this. */
 export const TEMP_DIR_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
-/** Only these temp-directory prefixes belong to UltraPlan; everything else is not ours. */
-export const TEMP_DIR_PREFIXES = ["ut-todo-update-", "ultraplan-update-", "ultraplan-install."] as const;
+/**
+ * The only temp-directory names that belong to UltraPlan: `ut-todo update`'s
+ * download folder (src/update.js), install.sh's `mktemp` folder and
+ * install.ps1's GUID folder. Everything else in the temp directory is not ours.
+ */
+export const TEMP_DIR_PREFIXES = ["ut-todo-update-", "ultraplan-install.", "ultraplan-install-"] as const;
 /** The one background install-log file name; it is capped by the update module. */
 export const INSTALL_LOG_NAME = "update.log";
 
@@ -57,26 +62,26 @@ export interface LocalPaths {
   lockFile: string;
 }
 
-/** Derive the main update module's cache layout from its resolved cache folder. */
+/** Derive the update module's cache layout from its resolved cache folder. */
 export function localPaths(cacheDir: string): LocalPaths {
   const dir = path.resolve(cacheDir);
   return {
     cacheDir: dir,
     stateFile: path.join(dir, "update.json"),
     claimFile: path.join(dir, "update.claim"),
-    logFile: path.join(dir, "update.log"),
+    logFile: path.join(dir, INSTALL_LOG_NAME),
     lockFile: path.join(dir, "update.lock"),
   };
 }
 
-/** The shape returned by the main update module's `detectInstall`. */
+/** An installer-managed copy, mapped by the CLI from the update module's `detectInstall`. */
 export interface InstallPlan {
   kind: "installer" | "npm" | "manual";
   /** Installer home (`<home>/app` is the application folder). */
   home?: string;
   appDir?: string;
   binDir?: string;
-  /** The command wrapper; its text names the release currently in use. */
+  /** The command wrapper (`ut-todo`, or `ut-todo.cmd` on Windows); its text names the release in use. */
   wrapper?: string;
   hint?: string;
 }
@@ -93,14 +98,14 @@ export interface LocalWrite {
 }
 
 /**
- * Every path UltraPlan writes, with its lifetime and what cleans it up. The
- * privacy document renders this table; `test/retention.test.ts` keeps the two
- * in step, so a new local write cannot ship undocumented.
+ * Every path UltraPlan writes, with its lifetime and what cleans it up.
+ * PRIVACY.md renders this table; `test/retention.test.ts` keeps the two in
+ * step, so a new local write cannot ship undocumented.
  */
 export const LOCAL_WRITES: readonly LocalWrite[] = [
   {
     paths: [".steak-pi/todo/<sha256>/todo.json"],
-    contents: "Phase names, task text and block reasons you wrote. No logs, no transcripts, no identifiers.",
+    contents: "Phase names, task text, statuses and block reasons you wrote. No logs, no transcripts, no identifiers.",
     lifetime: "Until you change or delete the plan.",
     cleanup: "Yours: remove the <sha256> folder, or `rm -rf .steak-pi/todo`. Nothing expires a plan.",
   },
@@ -112,89 +117,111 @@ export const LOCAL_WRITES: readonly LocalWrite[] = [
   },
   {
     paths: [".steak-pi/todo/<sha256>/.lock"],
-    contents: "Empty marker: one writer at a time for that plan.",
-    lifetime: "The lifetime of one command; stale after 30 s.",
-    cleanup: "Removed by the command that created it; a stale one is reclaimed after 30 s by the next writer or this sweep.",
+    contents: "Empty marker: one CLI writer at a time for that plan.",
+    lifetime: "One command; stale after 30 s.",
+    cleanup: "The command that created it; a stale one is reclaimed by the next writer or removed by the sweep.",
   },
   {
     paths: [".steak-pi/todo/<sha256>/.<name>.<pid>.<uuid>.tmp"],
     contents: "A staged copy of todo.json or TODO.md, used to write atomically.",
-    lifetime: "Milliseconds; renamed into place by the command that wrote it.",
-    cleanup: "Removed in the writer's `finally`; a leftover from a crash is swept after 1 hour.",
+    lifetime: "Milliseconds; renamed into place by the writer.",
+    cleanup: "The writer's `finally`; a crash leftover is swept after 1 hour.",
   },
   {
     paths: ["<cache>/update.json"],
-    contents: "The last check result and your settings: latest version, note text, timestamps, failure cause, skip, checks and auto-install choices. No id and no usage data.",
-    lifetime: "Until the next check or settings change replaces it; no expiry.",
-    cleanup: "Yours to delete at any time; deleting it only makes the next interactive check run.",
+    contents: "Last check time and result (newest version or failure cause), the version last announced and when, a skipped version, your check and auto-install settings, and after an update the rollback record (both versions, the kept folder's path, the time). No id, no usage data.",
+    lifetime: "Until the next check or settings change rewrites it; no expiry.",
+    cleanup: "Yours to delete at any time; the next interactive check simply runs again.",
   },
   {
-    paths: ["<cache>/update.json.<pid>.<hex>.tmp"],
-    contents: "A staged copy of update.json, used to write atomically.",
+    paths: ["<cache>/update.json.<pid>.<hex>.tmp", "<cache>/update.log.<pid>.<hex>.tmp"],
+    contents: "A staged copy of update.json or of the trimmed update.log, used to write atomically.",
     lifetime: "Milliseconds; renamed into place by the writer.",
-    cleanup: "Removed in the writer's `finally`; a leftover from a crash is swept after 1 hour.",
+    cleanup: "The writer's `finally`; a crash leftover is swept after 1 hour.",
   },
   {
     paths: ["<cache>/update.claim"],
-    contents: "A random token marking a check in flight, so parallel commands reuse one check.",
-    lifetime: "14 s: the check's 4 s timeout plus 10 s.",
-    cleanup: "Removed by the check that owns it; an expired claim is reclaimed by the next check or this sweep.",
+    contents: "A random token marking a check in flight, so commands started together share one check.",
+    lifetime: "One check; stale after 14 s (the 4 s timeout plus 10 s).",
+    cleanup: "The check that owns it; an expired claim is replaced by the next check or removed by the sweep.",
   },
   {
     paths: ["<cache>/update.lock"],
-    contents: "A marker so only one update installs at a time.",
-    lifetime: "The duration of one install; stale after 10 minutes.",
-    cleanup: "Removed by the install's `finally`; a leftover from a dead update is swept after 10 minutes.",
+    contents: "Empty marker: one update install at a time.",
+    lifetime: "One install; stale after 10 minutes.",
+    cleanup: "The install's `finally`; a leftover is replaced by the next install or removed by the sweep after 10 minutes.",
   },
   {
     paths: ["<cache>/update.log"],
-    contents: "Output of an opted-in background install. Never plan text.",
-    lifetime: "Newest 256 KB only; dropped after 7 days.",
-    cleanup: "Trimmed before and after every background install; removed by this sweep after 7 days.",
+    contents: "Written only when automatic updates are on: one timestamped line per background install (started, installed, or why it failed, with the installer's last output). Never plan text.",
+    lifetime: "Newest 256 KB only; dropped after 7 days without a new line.",
+    cleanup: "Trimmed on every write; removed by the sweep once its last line is 7 days old.",
   },
   {
-    paths: ["<app>/release-<version>.tmp", "<app>/release-<version>.rollback.tmp"],
-    contents: "A verified release tree being staged or rolled back.",
-    lifetime: "The duration of one install.",
-    cleanup: "Renamed into place by the install; a leftover from a crash is swept after 1 hour.",
-  },
-  {
-    paths: ["<app>/.staging-<guid>"],
-    contents: "A Windows installer's download and unpack folder, inside the tool's own home.",
-    lifetime: "The duration of one install.",
-    cleanup: "The installer; a leftover from a crash is swept after 1 hour.",
-  },
-  {
-    paths: ["<bin>/ut-todo.tmp.*"],
-    contents: "A command wrapper staged during an install.",
-    lifetime: "Milliseconds; renamed into place by the installer.",
-    cleanup: "Renamed into place by the installer; a leftover from a crash is swept after 1 hour.",
+    paths: ["<app>/release-<version>/"],
+    contents: "The installed program: the files of the release archive.",
+    lifetime: "Until an install of another version replaces it, or you uninstall.",
+    cleanup: "The installer removes every release folder the wrapper no longer names; uninstalling removes the rest.",
   },
   {
     paths: ["<app>/release-<version>.previous"],
-    contents: "The release kept for `ut-todo update --rollback`.",
-    lifetime: "Until the replacing release has run successfully once, and at most 7 days.",
-    cleanup: "The update's own cleanup or this sweep after a successful run / restore / 7 days, or `update --rollback` first.",
+    contents: "The release that `ut-todo update` replaced, kept for `ut-todo update --rollback`.",
+    lifetime: "Until the replacing release has run a command successfully, and at most 7 days.",
+    cleanup: "`update --rollback` restores it; otherwise the update module's pruning or the sweep removes it.",
   },
   {
-    paths: ["<tmp>/ut-todo-update-*", "<tmp>/ultraplan-update-*", "<tmp>/ultraplan-install.*"],
-    contents: "Installer, checksums and unpacked tree for one install.",
-    lifetime: "The duration of one install.",
-    cleanup: "The install's `finally`; a leftover from a crash is swept after 1 day.",
+    paths: ["<app>/runtime/node-<version>-<os>-<arch>/"],
+    contents: "The official Node.js build, downloaded only when no Node.js 22.19+ is installed.",
+    lifetime: "Until you uninstall; a later Node download leaves older ones in place.",
+    cleanup: "Yours: remove the folder (or the whole install folder) when no wrapper uses it.",
+  },
+  {
+    paths: ["<app>/release-<version>.tmp", "<app>/runtime/node-<version>-<os>-<arch>.tmp"],
+    contents: "A release or Node.js tree being unpacked and checked before it is renamed into place.",
+    lifetime: "One install.",
+    cleanup: "Renamed into place or removed by the installer; a crash leftover is swept after 1 hour.",
+  },
+  {
+    paths: ["<app>/.staging-<guid>"],
+    contents: "The PowerShell installer's unpack folder, inside the tool's own home.",
+    lifetime: "One install.",
+    cleanup: "The installer's `finally`; a crash leftover is swept after 1 hour.",
+  },
+  {
+    paths: ["<bin>/ut-todo", "<bin>/ut-todo.cmd"],
+    contents: "The command wrapper: the Node.js path and the release path it runs.",
+    lifetime: "Until you uninstall.",
+    cleanup: "Yours: delete it to uninstall. The installer never overwrites a file there it did not write.",
+  },
+  {
+    paths: ["<bin>/ut-todo.tmp.<pid>", "<bin>/ut-todo.cmd.tmp", "<bin>/<wrapper>.<pid>.<hex>.tmp"],
+    contents: "A command wrapper being written by an installer (or by `update --rollback`).",
+    lifetime: "Milliseconds; renamed into place.",
+    cleanup: "Renamed into place by its writer; a crash leftover is swept after 1 hour.",
+  },
+  {
+    paths: ["<tmp>/ut-todo-update-*"],
+    contents: "`ut-todo update`'s download of SHA256SUMS and the release installer.",
+    lifetime: "One update.",
+    cleanup: "The update's `finally`; a crash leftover is swept after 1 day.",
+  },
+  {
+    paths: ["<tmp>/ultraplan-install.*", "<tmp>/ultraplan-install-<guid>"],
+    contents: "An installer's download of the release archive, SHA256SUMS and, when needed, Node.js.",
+    lifetime: "One install.",
+    cleanup: "The installer's exit trap or `finally`; a crash leftover is swept after 1 day.",
   },
 ];
 
 const STAGING_RE = /^\..+\.tmp$/;
-const RELEASE_RE = /release-(\d+\.\d+\.\d+)/;
+const CACHE_STAGING_RE = /^update\.(?:json|log)\.\d+\.[0-9a-f]+\.tmp$/;
 const PREVIOUS_RE = /^release-(\d+\.\d+\.\d+)\.previous$/;
+/** The release a wrapper runs, in the shape both installers write (`.../release-<v>/bin/ut-todo`). */
+const WRAPPER_RELEASE_RE = /release-(\d+\.\d+\.\d+)[\\/]bin[\\/]ut-todo/;
 
 interface Entry {
   name: string;
   mtimeMs: number;
-}
-
-function stagingName(name: string): boolean {
-  return STAGING_RE.test(name);
 }
 
 /** Matching entries with their mtimes; a missing or unreadable directory is empty. */
@@ -226,17 +253,14 @@ async function remove(target: string): Promise<boolean> {
   }
 }
 
-async function mtimeOf(target: string): Promise<number | undefined> {
-  try {
-    return (await fs.lstat(target)).mtimeMs;
-  } catch {
-    return undefined;
-  }
-}
-
 async function removeIfOlderThan(target: string, maxAgeMs: number, now: number): Promise<string[]> {
-  const mtimeMs = await mtimeOf(target);
-  if (mtimeMs === undefined || now - mtimeMs < maxAgeMs) return [];
+  let mtimeMs: number;
+  try {
+    mtimeMs = (await fs.lstat(target)).mtimeMs;
+  } catch {
+    return [];
+  }
+  if (now - mtimeMs < maxAgeMs) return [];
   return await remove(target) ? [target] : [];
 }
 
@@ -259,24 +283,36 @@ async function removeStale(
 /** Staging files and a stale lock inside one plan folder; never the plan itself. */
 export async function sweepPlanStore(storeDir: string, now = Date.now()): Promise<string[]> {
   return [
-    ...await removeStale(storeDir, stagingName, STAGING_MAX_AGE_MS, now),
+    ...await removeStale(storeDir, (name) => STAGING_RE.test(name), STAGING_MAX_AGE_MS, now),
     ...await removeStale(storeDir, (name) => name === ".lock", STALE_LOCK_MS, now),
   ];
 }
 
-/** The update cache, its in-flight claim, install lock and log. */
-const UPDATE_CACHE_TMP_RE = /^update\.json\.\d+\.[0-9a-f]+\.tmp$/;
-
+/** Staging files in the update cache, an expired claim, a stale install lock and an old log; never update.json. */
 export async function sweepUpdateFiles(paths: LocalPaths, now = Date.now()): Promise<string[]> {
   return [
-    ...await removeStale(paths.cacheDir, (name) => UPDATE_CACHE_TMP_RE.test(name), STAGING_MAX_AGE_MS, now),
+    ...await removeStale(paths.cacheDir, (name) => CACHE_STAGING_RE.test(name), STAGING_MAX_AGE_MS, now),
     ...await removeIfOlderThan(paths.claimFile, CHECK_CLAIM_MAX_MS, now),
     ...await removeIfOlderThan(paths.lockFile, INSTALL_LOCK_MAX_MS, now),
     ...await removeIfOlderThan(paths.logFile, INSTALL_LOG_MAX_AGE_MS, now),
   ];
 }
 
-/** Installer staging left by a crashed install or update, and temp unpack folders. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Names a wrapper is staged under: install.sh `ut-todo.tmp.<pid>`, install.ps1
+ * `<wrapper>.tmp` (`ut-todo.cmd.tmp` on Windows) and the update module's atomic
+ * rewrite on rollback, `<wrapper>.<pid>.<hex>.tmp`.
+ */
+function wrapperStaging(wrapperName: string): (name: string) => boolean {
+  const atomic = new RegExp(`^${escapeRegExp(wrapperName)}\\.\\d+\\.[0-9a-f]+\\.tmp$`);
+  return (name) => name === `${wrapperName}.tmp` || name.startsWith(`${wrapperName}.tmp.`) || atomic.test(name);
+}
+
+/** Installer staging left by a crashed install or update, and the tool's own temp folders. */
 export async function sweepInstallArea(
   plan: InstallPlan,
   now = Date.now(),
@@ -284,33 +320,40 @@ export async function sweepInstallArea(
 ): Promise<string[]> {
   const removed: string[] = [];
   if (plan.kind === "installer" && plan.appDir) {
-    // Only staging goes: `.staging-<guid>`, `release-<version>.tmp` and
-    // `release-<version>.rollback.tmp`. A live `release-<version>` and the
-    // rollback copy are state, not debris.
+    // Only staging goes: `.staging-<guid>`, `release-<version>.tmp` and a Node
+    // download being unpacked. A live `release-<version>`, the rollback copy and
+    // an unpacked runtime are state, not debris.
     removed.push(...await removeStale(
       plan.appDir,
       (name) => name.startsWith(".staging-") || name.endsWith(".tmp"),
       STAGING_MAX_AGE_MS,
       now,
     ));
-    const wrapper = plan.wrapper;
-    if (wrapper) {
-      const wrapperStage = `${path.basename(wrapper)}.tmp.`;
+    removed.push(...await removeStale(
+      path.join(plan.appDir, "runtime"),
+      (name) => name.startsWith("node-") && name.endsWith(".tmp"),
+      STAGING_MAX_AGE_MS,
+      now,
+    ));
+    if (plan.wrapper) {
       removed.push(...await removeStale(
-        path.dirname(wrapper),
-        (name) => name.startsWith(wrapperStage),
+        path.dirname(plan.wrapper),
+        wrapperStaging(path.basename(plan.wrapper)),
         STAGING_MAX_AGE_MS,
         now,
       ));
     }
   }
-  for (const prefix of TEMP_DIR_PREFIXES) {
-    removed.push(...await removeStale(tmpDir, (name) => name.startsWith(prefix), TEMP_DIR_MAX_AGE_MS, now));
-  }
+  removed.push(...await removeStale(
+    tmpDir,
+    (name) => TEMP_DIR_PREFIXES.some((prefix) => name.startsWith(prefix)),
+    TEMP_DIR_MAX_AGE_MS,
+    now,
+  ));
   return removed;
 }
 
-export type RollbackRetirement = "ran-successfully" | "expired" | "restored" | "kept" | "absent";
+export type RollbackRetirement = "ran-successfully" | "expired" | "kept" | "absent";
 
 export interface RollbackState {
   retirement: RollbackRetirement;
@@ -318,43 +361,26 @@ export interface RollbackState {
   removed: string[];
 }
 
-function releaseName(text: string): string | undefined {
-  return RELEASE_RE.exec(text)?.[1];
-}
-
-async function readText(file: string): Promise<{ text: string; mtimeMs: number } | undefined> {
-  try {
-    const text = await fs.readFile(file, "utf8");
-    return { text, mtimeMs: (await fs.lstat(file)).mtimeMs };
-  } catch {
-    return undefined;
-  }
-}
-
 function isInside(dir: string, target: string): boolean {
   const relative = path.relative(path.resolve(dir), path.resolve(target));
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
-interface Copy {
-  target: string;
-  version?: string;
-  mtimeMs: number;
-}
-
 /**
- * Contract §4a: the rollback copies of an installer-managed swap are debris
- * once the release they replaced has proved itself. Main's installer keeps
- * `<app>/release-<version>.previous`; older copies keep a generic
- * `release-previous` with a `<wrapper>.previous` backup. Both are retired when
- * - this process is running from the release the wrapper now names and that
- *   release is not the kept one (`ran-successfully`),
- * - the wrapper was restored from the backup and this process is running from
- *   that restored release (`restored`),
- * - or the copies are seven days old (`expired`).
+ * Contract §4a for installer installs. `ut-todo update` runs the release's
+ * installer with ULTRAPLAN_KEEP_PREVIOUS, which keeps the replaced release as
+ * `<app>/release-<new>.previous`. The update module prunes that copy from its
+ * record in update.json; this is the record-free backstop, so the copy still
+ * goes when update.json was deleted. A copy is retired
+ * - once release `<new>` has run a command successfully: the wrapper names
+ *   `release-<new>` and this process runs from inside it (`ran-successfully`);
+ * - or seven days after the swap, measured from the newer of the copy's and the
+ *   wrapper's modification times (the installer rewrites the wrapper during the
+ *   swap) (`expired`).
  *
- * Anything else is kept: an unreadable or foreign wrapper, a copy whose version
- * cannot be attributed, or a first run that never completed.
+ * Anything else is kept: a missing or foreign wrapper, a copy for a release the
+ * wrapper does not name (until it expires), and a run from any other folder,
+ * such as the update command itself running from the release it just replaced.
  */
 export async function retireRollbackCopies(options: {
   appDir: string;
@@ -365,57 +391,45 @@ export async function retireRollbackCopies(options: {
 }): Promise<RollbackState> {
   const now = options.now ?? Date.now();
   const maxAgeMs = options.maxAgeMs ?? ROLLBACK_MAX_AGE_MS;
-  const wrapperText = await readText(options.wrapper);
-  const backupFile = `${options.wrapper}.previous`;
-  const backupText = await readText(backupFile);
-  const currentRelease = wrapperText ? releaseName(wrapperText.text) : undefined;
-  const backupRelease = backupText ? releaseName(backupText.text) : undefined;
-
-  const copies: Copy[] = [];
-  await Promise.all([
-    (async () => {
-      for (const entry of await listEntries(options.appDir, (name) => PREVIOUS_RE.test(name) || name === "release-previous")) {
-        copies.push({
-          target: path.join(options.appDir, entry.name),
-          version: PREVIOUS_RE.exec(entry.name)?.[1] ?? backupRelease,
-          mtimeMs: entry.mtimeMs,
-        });
-      }
-    })(),
-    (async () => {
-      if (backupText) copies.push({ target: backupFile, version: backupRelease, mtimeMs: backupText.mtimeMs });
-    })(),
-  ]);
+  const copies = await listEntries(options.appDir, (name) => PREVIOUS_RE.test(name));
   if (copies.length === 0) return { retirement: "absent", removed: [] };
 
-  const newest = Math.max(
-    ...copies.map((copy) => copy.mtimeMs),
-    ...[wrapperText?.mtimeMs].filter((value): value is number => typeof value === "number"),
-  );
-  let retirement: RollbackRetirement | undefined;
-  const runningCurrent = Boolean(currentRelease && options.selfPath
-    && isInside(path.join(options.appDir, `release-${currentRelease}`), options.selfPath));
-  if (now - newest >= maxAgeMs) retirement = "expired";
-  else if (runningCurrent && copies.some((copy) => copy.version && copy.version === currentRelease)) retirement = "restored";
-  else if (runningCurrent && copies.some((copy) => copy.version && copy.version !== currentRelease)) retirement = "ran-successfully";
+  let wrapper: { text: string; mtimeMs: number } | undefined;
+  try {
+    wrapper = { text: await fs.readFile(options.wrapper, "utf8"), mtimeMs: (await fs.lstat(options.wrapper)).mtimeMs };
+  } catch {
+    return { retirement: "kept", removed: [] };
+  }
+  const named = WRAPPER_RELEASE_RE.exec(wrapper.text)?.[1];
+  if (!named) return { retirement: "kept", removed: [] };
+  const runningNamed = Boolean(options.selfPath
+    && isInside(path.join(options.appDir, `release-${named}`), options.selfPath));
 
-  if (!retirement) return { retirement: "kept", removed: [] };
-  // Keep the historical order: wrapper backup first, then release copies.
-  const rank = (copy: Copy) => copy.target === backupFile ? 0 : 1;
-  copies.sort((left, right) => rank(left) - rank(right));
+  let retirement: RollbackRetirement = "kept";
   const removed: string[] = [];
-  for (const copy of copies) if (await remove(copy.target)) removed.push(copy.target);
+  for (const copy of copies) {
+    const replacedBy = PREVIOUS_RE.exec(copy.name)?.[1];
+    let reason: RollbackRetirement | undefined;
+    if (runningNamed && replacedBy === named) reason = "ran-successfully";
+    else if (now - Math.max(copy.mtimeMs, wrapper.mtimeMs) >= maxAgeMs) reason = "expired";
+    if (!reason) continue;
+    const target = path.join(options.appDir, copy.name);
+    if (await remove(target)) {
+      removed.push(target);
+      retirement = reason;
+    }
+  }
   return { retirement, removed };
 }
 
 export interface SweepOptions {
   /** The plan folder this command used; only that one is swept here. */
   storeDir?: string;
-  /** The file this process is running from; proves a swap's new release started. */
+  /** The file this process is running from; proves the wrapper's release has run. */
   selfPath?: string;
   /** Update cache paths; omitted when no update paths are known. */
   paths?: LocalPaths;
-  /** Install shape from `detectInstall`; absent for npm, source and manual installs. */
+  /** Install shape; only `installer` touches the install and bin folders. */
   plan?: InstallPlan;
   env?: NodeJS.ProcessEnv;
   now?: number;
@@ -425,7 +439,7 @@ export interface SweepOptions {
 export interface SweepReport {
   /** Absolute paths this sweep removed, in the order it removed them. */
   removed: string[];
-  /** What happened to the rollback copies, when there were any. */
+  /** What happened to the rollback copy, when the install is installer-managed. */
   rollback?: RollbackRetirement;
 }
 
@@ -434,8 +448,8 @@ export function cleanupDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 /**
- * One best-effort pass over every path in `LOCAL_WRITES`. Called after a
- * successful command, never during one, and never awaited by it.
+ * One best-effort pass over the debris paths in `LOCAL_WRITES`. The CLI awaits
+ * it after a successful command, so it never runs inside one.
  */
 export async function sweepLocalData(options: SweepOptions = {}): Promise<SweepReport> {
   const now = options.now ?? Date.now();

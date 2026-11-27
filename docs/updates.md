@@ -76,7 +76,8 @@ It is off when output is not a terminal, when `CI` is set, in agent shells, with
 All update state lives in one folder: `~/Library/Caches/ultraplan` (macOS),
 `$XDG_CACHE_HOME/ultraplan` or `~/.cache/ultraplan` (Linux),
 `%LOCALAPPDATA%\UltraPlan\cache` (Windows). It holds `update.json` (mode 0600:
-check time, latest version, skipped version, last notice, your settings) and,
+check time, latest version, skipped version, last notice, your settings and,
+after an update, the rollback record) and,
 only after an automatic install, `update.log` (kept under 256 KB); `update.claim`
 exists only while a check is running. Downloads go
 to a temporary folder that is deleted on success and on failure. To uninstall
@@ -89,28 +90,28 @@ For testing, `UT_TODO_UPDATE_API` points the check at another release record,
 
 ## Local-data retention
 
-After a successful command, never inside one, `ut-todo` makes one bounded,
-silent pass over the paths it owns; a failure in that pass is ignored. It
-removes crash staging from the plan folder (1 hour), a stale plan lock (30 s),
-staging files in the update cache (1 hour), an expired claim (14 s), an install
-lock left by a dead update (10 minutes) and a background install log older
-than seven days. If a sweep overlaps a reclaim of the same expired claim it
-can also remove the new token; that check still finishes, but the next
-interactive command may start another. The command's result is never changed.
+After a successful plan command, never inside one, `ut-todo` makes one
+bounded, silent pass over debris it wrote; a failure in that pass is ignored.
+It removes crash staging from the plan folder (1 hour), a stale plan lock
+(30 s), `update.json` and `update.log` staging files in the cache (1 hour), an
+expired claim (14 s), an install lock left by a dead update (10 minutes) and an
+`update.log` whose last line is seven days old. If a sweep overlaps a reclaim
+of the same expired claim it can also remove the new token; that check still
+finishes, but the next interactive command may start another. The command's
+result is never changed.
 
-Installer staging (`release-<version>.tmp`, `release-<version>.rollback.tmp`,
-`.staging-<guid>` and `<bin>/ut-todo.tmp.*`) is removed after 1 hour, and only
-`<tmp>/ut-todo-update-*`, `<tmp>/ultraplan-update-*` and
-`<tmp>/ultraplan-install.*` folders are removed after 1 day. Plans, the update
-cache and your settings are never touched. Set
-`ULTRAPLAN_NO_LOCAL_CLEANUP=1` to skip the pass and clean up by hand.
+For installer installs it also removes installer staging older than 1 hour
+(`<app>/release-<version>.tmp`, `<app>/runtime/node-*.tmp`, the PowerShell
+installer's `<app>/.staging-<guid>` and wrapper staging such as
+`<bin>/ut-todo.tmp.<pid>` or `<bin>/ut-todo.cmd.tmp`). In the system temp
+folder it removes only `<tmp>/ut-todo-update-*`, `<tmp>/ultraplan-install.*`
+and `<tmp>/ultraplan-install-*` entries older than 1 day. Plans, `update.json`,
+live releases and Node.js runtimes are never touched. Set
+`ULTRAPLAN_NO_LOCAL_CLEANUP=1` to skip the pass and clean up by hand; the
+update module's own rollback pruning above still runs.
 
-Rollback copies (`<app>/release-<version>.previous`) are retained for rollback
-until the release the wrapper now names has run successfully once, or for seven
-days at most. The sweep also retires a copy when a restored release has itself
-run: the wrapper points at the restored release and this process is now running from that restored release, so the kept copies are redundant. Any copy older
-than seven days is retired even when its version cannot be attributed to a
-wrapper. `ut-todo update --rollback` still restores a kept copy
-before then. The full inventory, with every lifetime, is in
-[PRIVACY.md](../PRIVACY.md).
-
+The pass is also a backstop for the rollback copy: it retires
+`<app>/release-<new>.previous` once the release the wrapper names has run
+successfully once (this process is running from it), or seven days after the
+swap, even when `update.json` and its rollback record were deleted. The full
+inventory, with every lifetime, is in [PRIVACY.md](../PRIVACY.md).

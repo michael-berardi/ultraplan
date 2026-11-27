@@ -37,14 +37,15 @@ ut-todo json '{"op":"start","items":["a","b"]}'  # any native op, verbatim
 ```
 
 `--session NAME` keeps a separate list for a named session. Plans stay in local
-files. The only network request the CLI can make is the anonymous release check
-described in `docs/updates.md`; it never runs automatically in an agent session.
+files. Inside a Claude Code session the CLI never checks for updates on its
+own: its anonymous daily release check runs only on a person's terminal, and
+`ut-todo update` contacts GitHub only when it is run (see `docs/updates.md`).
 
 ## Updates in an agent session
 
-Do not print update notices inside `ut-todo json` output. If the operator asks
-about updates, or at session start when they want them, run
-`ut-todo update --check` once and relay its line in your reply:
-`ut-todo update --auto on` opts into automatic installs, `ut-todo update --skip`
-hides a version, and `ut-todo update` shows release notes and installs with
-confirmation.
+If the operator asks about updates, run `ut-todo update --check` once and relay
+its result (exit 0 up to date, 10 update available, 1 check failed). Run
+`ut-todo update` only when the operator asks you to install: outside a terminal
+it installs without asking. `ut-todo update --skip` hides the offered version
+and `ut-todo update --auto on` turns on automatic installs; leave both choices
+to the operator.

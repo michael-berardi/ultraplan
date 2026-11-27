@@ -25,9 +25,7 @@ irm https://github.com/michael-berardi/ultraplan/releases/latest/download/instal
 
 The installers download the release archive and check its SHA-256. They
 use an existing Node.js 22.19+ or download Node into the tool's folder.
-To inspect before running, download the script and read it first. These links
-use GitHub's `latest` release assets; the npm example below pins `v0.5.4`,
-the version of this release.
+To inspect before running, download the script and read it first.
 
 With Node.js 22.19+ already installed, you can instead use npm:
 
@@ -143,11 +141,11 @@ resolve to the same project and owner. Stored files survive context compaction.
 
 ## Privacy
 
-- Network: at most one anonymous update check a day on a terminal (off with `UT_TODO_NO_UPDATE_CHECK=1`), plus installs and updates you start.
-- No telemetry, analytics, accounts, identifiers or model API calls from UltraPlan.
-- Plans stay in `<project>/.steak-pi/todo/` as plain files, owner-only on macOS and Linux.
-- Delete local data: remove your plans, cache and config as listed in [PRIVACY.md](PRIVACY.md).
-- Details and cleanup: [docs/updates.md](docs/updates.md).
+- Network: one anonymous update check a day on a terminal; turn it off with `UT_TODO_NO_UPDATE_CHECK=1` or `ut-todo update --auto-check off`.
+- Updates install only when you run `ut-todo update`, or automatically if you opt in with `ut-todo update --auto on`.
+- No telemetry, analytics, accounts or identifiers, and no model API calls from UltraPlan.
+- Plans stay in `<project>/.steak-pi/todo/` as plain files, owner-only on macOS and Linux; stale temporary files are cleaned up automatically.
+- Every file UltraPlan writes, how long it lives and how to delete it: [PRIVACY.md](PRIVACY.md).
 
 ## Development
 

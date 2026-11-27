@@ -23,6 +23,7 @@ import {
   sweepUpdateFiles,
 } from "../src/retention.ts";
 import type { InstallPlan } from "../src/retention.ts";
+import * as updates from "../src/update.js";
 
 /**
  * Local-data retention contract: every path in the inventory has a stated
@@ -131,9 +132,27 @@ describe("update cache, claim and log", () => {
     expect(existsSync(fresh)).toBe(true);
   });
 
-  it("uses the claim lifetime of the main update module", () => {
-    const claim = Date.now() - CHECK_CLAIM_MAX_MS - 60_000;
-    expect(claim).toBeLessThan(Date.now() - CHECK_CLAIM_MAX_MS);
+  it("uses the update module's own cache layout and lifetimes", () => {
+    const env = { ULTRAPLAN_CACHE_DIR: path.join(ROOT, "no-such-cache") } as NodeJS.ProcessEnv;
+    const paths = localPaths(updates.cacheDir(env));
+    expect(paths.stateFile).toBe(updates.statePath(env));
+    expect(paths.claimFile).toBe(updates.claimPath(env));
+    expect(paths.logFile).toBe(updates.logPath(env));
+    expect(paths.lockFile).toBe(path.join(updates.cacheDir(env), "update.lock"));
+    expect(CHECK_CLAIM_MAX_MS).toBe(updates.CLAIM_STALE_MS);
+    expect(ROLLBACK_MAX_AGE_MS).toBe(updates.ROLLBACK_MAX_AGE_MS);
+    const source = readFileSync(path.join(ROOT, "src", "update.js"), "utf8");
+    expect(source).toContain(`const LOCK_STALE_MS = ${INSTALL_LOCK_MAX_MS / 60_000} * 60 * 1000;`);
+    expect(source).toContain('path.join(cacheDir(env), "update.lock")');
+  });
+
+  it("removes a crashed staging file of the trimmed log, but not one of a foreign file", async () => {
+    const dir = await tempDir();
+    const { paths } = updateFixture(dir);
+    const logStage = await plant(path.join(paths.cacheDir, "update.log.77.0a1b.tmp"), "x", older(STAGING_MAX_AGE_MS));
+    const foreign = await plant(path.join(paths.cacheDir, "notes.log.77.0a1b.tmp"), "x", older(STAGING_MAX_AGE_MS));
+    expect(await sweepUpdateFiles(paths)).toEqual([logStage]);
+    expect(existsSync(foreign)).toBe(true);
   });
 
   it("keeps a fresh claim, a fresh staging file and a recent log", async () => {
@@ -158,13 +177,13 @@ describe("update cache, claim and log", () => {
 });
 
 describe("installer area", () => {
-  const installer = (dir: string): InstallPlan & { appDir: string; wrapper: string } => ({
+  const installer = (dir: string, wrapperName = "ut-todo"): InstallPlan & { appDir: string; wrapper: string } => ({
     kind: "installer",
     appDir: path.join(dir, "app"),
-    wrapper: path.join(dir, "bin", "ut-todo"),
+    wrapper: path.join(dir, "bin", wrapperName),
   });
 
-  it("removes crashed staging but keeps the live release and the rollback copy", async () => {
+  it("removes crashed staging but keeps the live release, the rollback copy and the runtime", async () => {
     const dir = await tempDir();
     const plan = installer(dir);
     const live = await plant(path.join(plan.appDir, "release-0.5.4", "bin", "ut-todo"), "new");
@@ -172,132 +191,169 @@ describe("installer area", () => {
     await plant(path.join(stage, "bin", "ut-todo"), "new");
     const aged = new Date(Date.now() - older(STAGING_MAX_AGE_MS));
     await fs.utimes(stage, aged, aged);
-    const rollbackStage = await plant(path.join(plan.appDir, "release-0.5.3.rollback.tmp"), "old", older(STAGING_MAX_AGE_MS));
     const windowsStage = await plant(path.join(plan.appDir, ".staging-abc123"), null, older(STAGING_MAX_AGE_MS));
-    const rollbackCopy = await plant(path.join(plan.appDir, "release-previous"), null);
+    const nodeStage = await plant(path.join(plan.appDir, "runtime", "node-v22.20.0-linux-x64.tmp"), null, older(STAGING_MAX_AGE_MS));
+    const runtime = await plant(path.join(plan.appDir, "runtime", "node-v22.20.0-linux-x64"), null, older(ROLLBACK_MAX_AGE_MS));
+    const rollbackCopy = await plant(path.join(plan.appDir, "release-0.5.4.previous"), null, older(STAGING_MAX_AGE_MS));
     const wrapper = await plant(plan.wrapper, "#!/bin/sh\nexec node \".../release-0.5.4/bin/ut-todo\" \"$@\"\n");
-    const wrapperStage = await plant(`${plan.wrapper}.tmp.1234`, "x", older(STAGING_MAX_AGE_MS));
+    const shStage = await plant(`${plan.wrapper}.tmp.1234`, "x", older(STAGING_MAX_AGE_MS));
+    const psStage = await plant(`${plan.wrapper}.tmp`, "x", older(STAGING_MAX_AGE_MS));
+    const rollbackStage = await plant(`${plan.wrapper}.4321.0badc0de.tmp`, "x", older(STAGING_MAX_AGE_MS));
+    const freshStage = await plant(`${plan.wrapper}.tmp.99`, "x");
+    const foreign = await plant(path.join(path.dirname(plan.wrapper), "other-tool.tmp"), "x", older(STAGING_MAX_AGE_MS));
     const removed = await sweepInstallArea(plan, Date.now(), path.join(dir, "tmp"));
-    expect(removed.sort()).toEqual([stage, rollbackStage, windowsStage, wrapperStage].sort());
-    for (const kept of [live, rollbackCopy, wrapper]) expect(existsSync(kept)).toBe(true);
+    expect(removed.sort()).toEqual([stage, windowsStage, nodeStage, shStage, psStage, rollbackStage].sort());
+    for (const kept of [live, runtime, rollbackCopy, wrapper, freshStage, foreign]) expect(existsSync(kept)).toBe(true);
+  });
+
+  it("matches the Windows wrapper's staging name, ut-todo.cmd.tmp", async () => {
+    const dir = await tempDir();
+    const plan = installer(dir, "ut-todo.cmd");
+    await plant(plan.wrapper, "@echo off\r\nREM ultraplan-installer-shim\r\n\"node\" \"%~dp0..\\app\\release-0.5.4\\bin\\ut-todo\" %*\r\n");
+    const stage = await plant(`${plan.wrapper}.tmp`, "x", older(STAGING_MAX_AGE_MS));
+    expect(await sweepInstallArea(plan, Date.now(), path.join(dir, "tmp"))).toEqual([stage]);
+    expect(existsSync(plan.wrapper)).toBe(true);
   });
 
   it("removes only its own aged folders from the system temp directory", async () => {
     const dir = await tempDir();
     const tmp = path.join(dir, "tmp");
-    const updateTmp = await plant(path.join(tmp, "ultraplan-update-abcd"), null, older(TEMP_DIR_MAX_AGE_MS));
-    const installTmp = await plant(path.join(tmp, "ultraplan-install.xy12"), null, older(TEMP_DIR_MAX_AGE_MS));
-    const fresh = await plant(path.join(tmp, "ultraplan-update-fresh"), null);
+    const updateTmp = await plant(path.join(tmp, "ut-todo-update-AbC123"), null, older(TEMP_DIR_MAX_AGE_MS));
+    const shTmp = await plant(path.join(tmp, "ultraplan-install.xy12Zq"), null, older(TEMP_DIR_MAX_AGE_MS));
+    const psTmp = await plant(path.join(tmp, "ultraplan-install-6f1c2a3b-0d4e-4f5a-9b6c-7d8e9f0a1b2c"), null, older(TEMP_DIR_MAX_AGE_MS));
+    const fresh = await plant(path.join(tmp, "ut-todo-update-fresh1"), null);
     const foreign = await plant(path.join(tmp, "someone-else"), null, older(TEMP_DIR_MAX_AGE_MS));
+    const notOurs = await plant(path.join(tmp, "ultraplan-build.k3j2h1"), null, older(TEMP_DIR_MAX_AGE_MS));
     const removed = await sweepInstallArea({ kind: "npm" }, Date.now(), tmp);
-    expect(removed.sort()).toEqual([updateTmp, installTmp].sort());
-    for (const kept of [fresh, foreign]) expect(existsSync(kept)).toBe(true);
+    expect(removed.sort()).toEqual([updateTmp, shTmp, psTmp].sort());
+    for (const kept of [fresh, foreign, notOurs]) expect(existsSync(kept)).toBe(true);
   });
 
-  it("touches no user area for an npm, source or manual install", async () => {
+  it("touches no install folder for an npm, source or manual install", async () => {
     const dir = await tempDir();
     const plan = installer(dir);
     await plant(path.join(plan.appDir, "release-0.5.4.tmp"), "x", older(STAGING_MAX_AGE_MS));
-    const removed = await sweepInstallArea({ kind: "npm" }, Date.now(), path.join(dir, "absent-tmp"));
-    expect(removed).toEqual([]);
+    for (const kind of ["npm", "manual"] as const) {
+      expect(await sweepInstallArea({ kind }, Date.now(), path.join(dir, "absent-tmp"))).toEqual([]);
+    }
     expect(existsSync(path.join(plan.appDir, "release-0.5.4.tmp"))).toBe(true);
+  });
+
+  it("sweeps exactly the staging names the installers and the update module write", () => {
+    const sh = readFileSync(path.join(ROOT, "scripts", "install.sh"), "utf8");
+    const ps1 = readFileSync(path.join(ROOT, "scripts", "install.ps1"), "utf8");
+    const update = readFileSync(path.join(ROOT, "src", "update.js"), "utf8");
+    expect(sh).toContain('mktemp -d "${TMPDIR:-/tmp}/ultraplan-install.XXXXXX"');
+    expect(sh).toContain('"$BIN_DIR/ut-todo.tmp.$$"');
+    expect(sh).toContain('mv "$TMP/src" "$REL.tmp"');
+    expect(sh).toContain('NODE_DIR="$APP/runtime/node-$nver-$os-$arch"');
+    expect(sh).toContain('mkdir "$NODE_DIR.tmp"');
+    expect(sh).toContain('mv "$keep" "$REL.previous"');
+    expect(ps1).toContain("('ultraplan-install-' + [guid]::NewGuid())");
+    expect(ps1).toContain("('.staging-' + [guid]::NewGuid())");
+    expect(ps1).toContain('$relTmp = "$rel.tmp"');
+    expect(ps1).toContain('Write-ShimFile -Path "$shim.tmp"');
+    expect(ps1).toContain('$previous = "$rel.previous"');
+    expect(update).toContain('mkdtempSync(path.join(tmpRoot, "ut-todo-update-"))');
+    expect(update).toContain("const temporary = `${file}.${process.pid}.${randomBytes(4).toString(\"hex\")}.tmp`;");
+    expect(update).toContain("`release-${version}.previous`");
+    expect([...TEMP_DIR_PREFIXES].sort()).toEqual(["ultraplan-install-", "ultraplan-install.", "ut-todo-update-"]);
   });
 });
 
-describe("rollback copies (contract §4a)", () => {
-  async function fixture(dir: string, current: string, backup: string) {
+describe("rollback copy (contract §4a)", () => {
+  /** The layout `ut-todo update` leaves: release-<new> live, release-<new>.previous kept, wrapper on <new>. */
+  async function fixture(dir: string, versions: { live?: string; kept?: string; named?: string } = {}) {
+    const { live = "0.5.4", kept = "0.5.4" } = versions;
+    const named = versions.named ?? live;
     const appDir = path.join(dir, "app");
     const wrapper = path.join(dir, "bin", "ut-todo");
-    const selfPath = await plant(path.join(appDir, `release-${current}`, "bin", "ut-todo"), "new");
-    await plant(path.join(appDir, "release-previous", "bin", "ut-todo"), "old");
-    await plant(wrapper, `#!/bin/sh\nexec node "${path.join(appDir, `release-${current}`, "bin", "ut-todo")}" "$@"\n`);
-    const backupFile = await plant(`${wrapper}.previous`,
-      `#!/bin/sh\nexec node "${path.join(appDir, `release-${backup}`, "bin", "ut-todo")}" "$@"\n`);
-    return { appDir, wrapper, selfPath, backupFile, previousDir: path.join(appDir, "release-previous") };
+    const selfPath = await plant(path.join(appDir, `release-${live}`, "bin", "ut-todo"), "new");
+    const previousDir = path.join(appDir, `release-${kept}.previous`);
+    await plant(path.join(previousDir, "bin", "ut-todo"), "old");
+    await plant(wrapper, `#!/bin/sh\n# ultraplan-installer-shim\nexec "/usr/bin/node" "${path.join(appDir, `release-${named}`, "bin", "ut-todo")}" "$@"\n`);
+    return { appDir, wrapper, selfPath, previousDir };
   }
 
-  it("retires both copies once the replacing release has run successfully", async () => {
-    const dir = await tempDir();
-    const { appDir, wrapper, selfPath, backupFile, previousDir } = await fixture(dir, "0.5.4", "0.5.3");
-    const state = await retireRollbackCopies({ appDir, wrapper, selfPath });
-    expect(state).toEqual({ retirement: "ran-successfully", removed: [backupFile, previousDir] });
-    expect(existsSync(backupFile)).toBe(false);
-    expect(existsSync(previousDir)).toBe(false);
-    expect(existsSync(selfPath)).toBe(true);
-  });
+  async function age(targets: string[], ms: number) {
+    const when = new Date(Date.now() - ms);
+    for (const target of targets) await fs.utimes(target, when, when);
+  }
 
-  it("keeps them while the old release is still the one running", async () => {
+  it("retires release-<new>.previous once release <new> has run a command", async () => {
     const dir = await tempDir();
-    const { appDir, wrapper, previousDir } = await fixture(dir, "0.5.4", "0.5.3");
-    const oldSelf = path.join(previousDir, "bin", "ut-todo");
-    expect((await retireRollbackCopies({ appDir, wrapper, selfPath: oldSelf })).retirement).toBe("kept");
-    expect((await retireRollbackCopies({ appDir, wrapper })).retirement).toBe("kept");
-    expect(existsSync(`${wrapper}.previous`)).toBe(true);
-    expect(existsSync(previousDir)).toBe(true);
-  });
-
-  it("keeps them until the restored release, not the rollback command, has run", async () => {
-    const dir = await tempDir();
-    const { appDir, wrapper, selfPath, backupFile, previousDir } = await fixture(dir, "0.5.3", "0.5.3");
-    const fromReplacedRelease = await plant(path.join(appDir, "release-0.5.4", "bin", "ut-todo"), "new");
-    expect((await retireRollbackCopies({ appDir, wrapper, selfPath: fromReplacedRelease })).retirement)
-      .toBe("kept");
-    expect((await retireRollbackCopies({ appDir, wrapper })).retirement).toBe("kept");
-    expect(existsSync(backupFile)).toBe(true);
-    expect(existsSync(previousDir)).toBe(true);
-
-    const state = await retireRollbackCopies({ appDir, wrapper, selfPath });
-    expect(state).toEqual({ retirement: "restored", removed: [backupFile, previousDir] });
-    expect(existsSync(backupFile)).toBe(false);
-    expect(existsSync(previousDir)).toBe(false);
-  });
-
-  it("retires them after seven days even with no successful run", async () => {
-    const dir = await tempDir();
-    const { appDir, wrapper, backupFile, previousDir } = await fixture(dir, "0.5.4", "0.5.3");
-    const when = new Date(Date.now() - (ROLLBACK_MAX_AGE_MS + 60_000));
-    for (const target of [backupFile, previousDir, wrapper]) await fs.utimes(target, when, when);
-    expect((await retireRollbackCopies({ appDir, wrapper })).retirement).toBe("expired");
-    expect(existsSync(backupFile)).toBe(false);
-    expect(existsSync(previousDir)).toBe(false);
-  });
-
-  it("keeps an unattributable copy until it expires", async () => {
-    const dir = await tempDir();
-    const { appDir, wrapper, backupFile, previousDir } = await fixture(dir, "0.5.4", "0.5.3");
-    await fs.writeFile(wrapper, "#!/bin/sh\nexec node \"$HOME/elsewhere/ut-todo\" \"$@\"\n");
-    const selfPath = path.join(appDir, "release-0.5.4", "bin", "ut-todo");
-    expect((await retireRollbackCopies({ appDir, wrapper, selfPath })).retirement).toBe("kept");
-    expect(existsSync(backupFile)).toBe(true);
-    expect(existsSync(previousDir)).toBe(true);
-    const when = new Date(Date.now() - (ROLLBACK_MAX_AGE_MS + 60_000));
-    for (const target of [backupFile, previousDir, wrapper]) await fs.utimes(target, when, when);
-    expect((await retireRollbackCopies({ appDir, wrapper, selfPath })).retirement).toBe("expired");
-    expect(existsSync(backupFile)).toBe(false);
-    expect(existsSync(previousDir)).toBe(false);
-  });
-
-  it("retires main's versioned previous release once the replacing release has run", async () => {
-    const dir = await tempDir();
-    const appDir = path.join(dir, "app");
-    const wrapper = path.join(dir, "bin", "ut-todo");
-    const previousDir = await plant(path.join(appDir, "release-0.5.3.previous", "bin", "ut-todo"), "old");
-    const selfPath = await plant(path.join(appDir, "release-0.5.4", "bin", "ut-todo"), "new");
-    await plant(wrapper, `#!/bin/sh\nexec node "${path.join(appDir, "release-0.5.4", "bin", "ut-todo")}" "$@"\n`);
+    const { appDir, wrapper, selfPath, previousDir } = await fixture(dir);
     expect(await retireRollbackCopies({ appDir, wrapper, selfPath }))
-      .toEqual({ retirement: "ran-successfully", removed: [path.join(appDir, "release-0.5.3.previous")] });
+      .toEqual({ retirement: "ran-successfully", removed: [previousDir] });
     expect(existsSync(previousDir)).toBe(false);
     expect(existsSync(selfPath)).toBe(true);
+    expect(existsSync(wrapper)).toBe(true);
   });
 
-  it("keeps main's versioned previous release until the wrapper's release has run", async () => {
+  it("keeps it while the update command still runs from the release it replaced", async () => {
     const dir = await tempDir();
-    const appDir = path.join(dir, "app");
-    const wrapper = path.join(dir, "bin", "ut-todo");
-    const previousDir = await plant(path.join(appDir, "release-0.5.3.previous", "bin", "ut-todo"), "old");
-    await plant(wrapper, `#!/bin/sh\nexec node "${path.join(appDir, "release-0.5.4", "bin", "ut-todo")}" "$@"\n`);
+    const { appDir, wrapper, previousDir } = await fixture(dir);
+    // The updating process started from release-0.5.3, which the installer just renamed to release-0.5.4.previous.
+    const oldSelf = path.join(appDir, "release-0.5.3", "bin", "ut-todo");
+    expect((await retireRollbackCopies({ appDir, wrapper, selfPath: oldSelf })).retirement).toBe("kept");
+    expect((await retireRollbackCopies({ appDir, wrapper, selfPath: path.join(previousDir, "bin", "ut-todo") })).retirement).toBe("kept");
     expect((await retireRollbackCopies({ appDir, wrapper })).retirement).toBe("kept");
     expect(existsSync(previousDir)).toBe(true);
+  });
+
+  it("measures the seven days from the swap, not from the old release's own age", async () => {
+    const dir = await tempDir();
+    const { appDir, wrapper, previousDir } = await fixture(dir);
+    // A rename keeps the folder's old mtime; the wrapper written during the swap is fresh.
+    await age([previousDir], older(ROLLBACK_MAX_AGE_MS) * 4);
+    expect((await retireRollbackCopies({ appDir, wrapper })).retirement).toBe("kept");
+    expect(existsSync(previousDir)).toBe(true);
+    await age([wrapper], older(ROLLBACK_MAX_AGE_MS));
+    expect(await retireRollbackCopies({ appDir, wrapper })).toEqual({ retirement: "expired", removed: [previousDir] });
+    expect(existsSync(previousDir)).toBe(false);
+  });
+
+  it("keeps a copy for a release the wrapper does not name until it expires", async () => {
+    const dir = await tempDir();
+    const { appDir, wrapper, selfPath, previousDir } = await fixture(dir, { live: "0.5.5", kept: "0.5.4" });
+    expect((await retireRollbackCopies({ appDir, wrapper, selfPath })).retirement).toBe("kept");
+    expect(existsSync(previousDir)).toBe(true);
+    await age([previousDir, wrapper], older(ROLLBACK_MAX_AGE_MS));
+    expect((await retireRollbackCopies({ appDir, wrapper, selfPath })).retirement).toBe("expired");
+    expect(existsSync(previousDir)).toBe(false);
+  });
+
+  it("keeps everything when the wrapper is missing or names no release", async () => {
+    const dir = await tempDir();
+    const { appDir, wrapper, selfPath, previousDir } = await fixture(dir);
+    await age([previousDir], older(ROLLBACK_MAX_AGE_MS));
+    await fs.writeFile(wrapper, "#!/bin/sh\nexec node \"$HOME/elsewhere/ut-todo\" \"$@\"\n");
+    await age([wrapper], older(ROLLBACK_MAX_AGE_MS));
+    expect((await retireRollbackCopies({ appDir, wrapper, selfPath })).retirement).toBe("kept");
+    await fs.rm(wrapper);
+    expect((await retireRollbackCopies({ appDir, wrapper, selfPath })).retirement).toBe("kept");
+    expect(existsSync(previousDir)).toBe(true);
+  });
+
+  it("reads the release from a Windows cmd wrapper", async () => {
+    const dir = await tempDir();
+    const appDir = path.join(dir, "app");
+    const wrapper = path.join(dir, "bin", "ut-todo.cmd");
+    const selfPath = await plant(path.join(appDir, "release-0.5.4", "bin", "ut-todo"), "new");
+    const previousDir = await plant(path.join(appDir, "release-0.5.4.previous"), null);
+    await plant(wrapper, "@echo off\r\nREM ultraplan-installer-shim\r\n\"node\" \"%~dp0..\\app\\release-0.5.4\\bin\\ut-todo\" %*\r\n");
+    expect(await retireRollbackCopies({ appDir, wrapper, selfPath }))
+      .toEqual({ retirement: "ran-successfully", removed: [previousDir] });
+  });
+
+  it("never touches names the tool does not write", async () => {
+    const dir = await tempDir();
+    const { appDir, wrapper, selfPath } = await fixture(dir);
+    const generic = await plant(path.join(appDir, "release-previous"), null, older(ROLLBACK_MAX_AGE_MS));
+    const backup = await plant(`${wrapper}.previous`, "user file", older(ROLLBACK_MAX_AGE_MS));
+    await retireRollbackCopies({ appDir, wrapper, selfPath });
+    expect(existsSync(generic)).toBe(true);
+    expect(existsSync(backup)).toBe(true);
   });
 
   it("reports an absent rollback instead of inventing work", async () => {
@@ -318,17 +374,17 @@ describe("the whole local-data sweep", () => {
     const claim = await plant(paths.claimFile, "{}", older(60 * 60 * 1_000));
     const log = await plant(paths.logFile, "x", older(INSTALL_LOG_MAX_AGE_MS));
     const selfPath = await plant(path.join(appDir, "release-0.5.4", "bin", "ut-todo"), "new");
-    await plant(path.join(appDir, "release-previous", "bin", "ut-todo"), "old");
+    const previous = await plant(path.join(appDir, "release-0.5.4.previous", "bin", "ut-todo"), "old");
     await plant(wrapper, `#!/bin/sh\nexec node "${path.join(appDir, "release-0.5.4", "bin", "ut-todo")}" "$@"\n`);
-    const backup = await plant(`${wrapper}.previous`, `#!/bin/sh\nexec node "${path.join(appDir, "release-0.5.3", "bin", "ut-todo")}" "$@"\n`);
-    const tmp = await plant(path.join(dir, "tmp", "ultraplan-update-dead"), null, older(TEMP_DIR_MAX_AGE_MS));
+    const tmp = await plant(path.join(dir, "tmp", "ut-todo-update-dead00"), null, older(TEMP_DIR_MAX_AGE_MS));
     const plan: InstallPlan = { kind: "installer", appDir, wrapper };
-    const report = await sweepLocalData({ storeDir: path.dirname(store), selfPath, paths, plan, tmpDir: tmp ? path.dirname(tmp) : dir });
+    const report = await sweepLocalData({ storeDir: path.dirname(store), selfPath, paths, plan, tmpDir: path.dirname(tmp) });
     expect(report.rollback).toBe("ran-successfully");
-    for (const gone of [storeStage, claim, log, backup, path.join(appDir, "release-previous"), tmp]) {
+    for (const gone of [storeStage, claim, log, path.dirname(path.dirname(previous)), tmp]) {
       expect(existsSync(gone)).toBe(false);
     }
     expect(existsSync(store)).toBe(true);
+    expect(existsSync(selfPath)).toBe(true);
     const again = await sweepLocalData({ storeDir: path.dirname(store), selfPath, paths, plan, tmpDir: path.dirname(tmp) });
     expect(again.removed).toEqual([]);
     expect(again.rollback).toBe("absent");
@@ -410,12 +466,15 @@ describe("the running command triggers the sweep, without changing its result", 
 describe("the privacy document matches the code", () => {
   const privacy = readFileSync(path.join(ROOT, "PRIVACY.md"), "utf8");
   const readme = readFileSync(path.join(ROOT, "README.md"), "utf8");
+  const updates = readFileSync(path.join(ROOT, "docs", "updates.md"), "utf8");
 
   it("documents every path the inventory names", () => {
     const paths = LOCAL_WRITES.flatMap((entry) => entry.paths);
-    expect(paths.length).toBeGreaterThanOrEqual(14);
-    expect(paths).toContain("<bin>/ut-todo.tmp.*");
-    expect(paths.filter((entry) => !privacy.includes(entry))).toEqual([]);
+    expect(paths.length).toBeGreaterThanOrEqual(20);
+    for (const name of ["<bin>/ut-todo.tmp.<pid>", "<bin>/ut-todo.cmd.tmp", "<tmp>/ultraplan-install-<guid>", "<app>/release-<version>.previous"]) {
+      expect(paths).toContain(name);
+    }
+    expect(paths.filter((entry) => !privacy.includes(`\`${entry}\``))).toEqual([]);
   });
 
   it("defines its path roots without repeating ultraplan inside them", () => {
@@ -428,23 +487,30 @@ describe("the privacy document matches the code", () => {
     expect(privacy).not.toContain("<cache>/update-check.json");
   });
 
-  it("names only the tool-owned temp prefixes the sweep uses", () => {
-    expect(TEMP_DIR_PREFIXES).toEqual(["ut-todo-update-", "ultraplan-update-", "ultraplan-install."]);
-    expect(privacy).toContain("<tmp>/ut-todo-update-*");
-    expect(privacy).toContain("<tmp>/ultraplan-update-*");
-    expect(privacy).toContain("<tmp>/ultraplan-install.*");
-    expect(privacy).not.toMatch(/`ultraplan-\*` folders/);
-    const updates = readFileSync(path.join(ROOT, "docs", "updates.md"), "utf8");
-    expect(updates).toContain("<tmp>/ut-todo-update-*");
-    expect(updates).toContain("<tmp>/ultraplan-update-*");
-    expect(updates).toContain("<tmp>/ultraplan-install.*");
-    expect(updates).not.toMatch(/`ultraplan-\*` folders/);
+  it("names only the temp folders and staging names the tool really writes", () => {
+    for (const text of [privacy, updates]) {
+      expect(text).toContain("<tmp>/ut-todo-update-*");
+      expect(text).toContain("<tmp>/ultraplan-install.*");
+      expect(text).toMatch(/ultraplan-install-(?:\*|<guid>)/);
+      // Names from the never-released privacy-branch updater; nothing writes them.
+      expect(text).not.toContain("ultraplan-update-");
+      expect(text).not.toContain(".rollback.tmp");
+      expect(text).not.toMatch(/`ultraplan-\*` folders/);
+    }
+  });
+
+  it("states the lifetimes the code uses", () => {
+    expect(STAGING_MAX_AGE_MS).toBe(60 * 60 * 1000);
+    expect(STALE_LOCK_MS).toBe(30_000);
+    expect(TEMP_DIR_MAX_AGE_MS).toBe(24 * 60 * 60 * 1000);
+    expect(INSTALL_LOG_MAX_AGE_MS).toBe(ROLLBACK_MAX_AGE_MS);
+    expect(ROLLBACK_MAX_AGE_MS).toBe(7 * 24 * 60 * 60 * 1000);
+    for (const fact of ["1 hour", "30 s", "14 s", "10 minutes", "1 day", "7 days", "256 KB"]) expect(privacy).toContain(fact);
   });
 
   it("states the claim's age and its overlap with an in-flight reclaim", () => {
     expect(privacy).toContain("14 s old");
     expect(privacy).toMatch(/overlaps a check reclaiming/);
-    const updates = readFileSync(path.join(ROOT, "docs", "updates.md"), "utf8");
     expect(updates).toContain("14 s");
     expect(updates).toMatch(/overlaps a reclaim/);
   });
@@ -463,27 +529,25 @@ describe("the privacy document matches the code", () => {
     const lines = section.split("\n").slice(1).filter((line) => line.trim() !== "");
     expect(lines.length).toBeGreaterThanOrEqual(3);
     expect(lines.length).toBeLessThanOrEqual(6);
-    expect(section).not.toContain("0700/0600");
     expect(section).not.toContain("0700");
-    expect(section).toMatch(/[Dd]elete local data/);
-    expect(section).toMatch(/remove\s+your plans, cache and config/);
+    expect(section).toMatch(/anonymous update check a day/);
+    expect(section).toContain("UT_TODO_NO_UPDATE_CHECK=1");
     expect(section).toContain("[PRIVACY.md](PRIVACY.md)");
-    expect(section).toContain("[docs/updates.md](docs/updates.md)");
-    expect(privacy).toContain("ULTRAPLAN_NO_LOCAL_CLEANUP=1");
-    expect(privacy).toMatch(/(?:seven|7) days/);
+    expect(readme).not.toMatch(/unpublished|not (?:yet )?published/i);
   });
 
-  it("requires the restored release itself, not just the rollback command, before deleting copies", () => {
-    expect(privacy).toMatch(/this process is now\s+running from that restored release/);
-    const updates = readFileSync(path.join(ROOT, "docs", "updates.md"), "utf8");
-    expect(updates).toMatch(/this process\s+is now running from that restored release/);
+  it("says the cleanup opt-out leaves the update module's own housekeeping on", () => {
+    expect(privacy).toContain("ULTRAPLAN_NO_LOCAL_CLEANUP=1");
+    expect(privacy).toMatch(/does not switch off the update module's own\s+housekeeping/);
+    expect(updates).toMatch(/update module's own rollback pruning above still runs/);
   });
 
   it("records the automatic rollback cleanup in the update contract", () => {
-    const updates = readFileSync(path.join(ROOT, "docs", "updates.md"), "utf8");
     expect(updates).not.toMatch(/does \*\*not\*\* implement\s+that cleanup/);
-    expect(updates).toMatch(/run successfully once/);
+    expect(updates).toMatch(/run\s+successfully\s+once/);
     expect(updates).toMatch(/(?:seven|7) days/);
-    expect(JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8")).files).toContain("PRIVACY.md");
+    const files = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8")).files;
+    expect(files).toContain("PRIVACY.md");
+    expect(files).toContain("docs");
   });
 });

@@ -3,24 +3,33 @@
 All notable changes to UltraPlan are documented here. The project uses
 [Semantic Versioning](https://semver.org/).
 
-## 0.5.4 — 2026-11-26
+## 0.5.4 — 2026-11-27
 
-- Added [PRIVACY.md](PRIVACY.md): the complete inventory of every local write,
-  what it holds, how long it lives and what removes it. The README Privacy
-  section is a short summary that links to it; SECURITY.md and
-  `docs/updates.md` describe the same anonymous daily update check and its
-  opt-outs (`UT_TODO_NO_UPDATE_CHECK=1` or `ut-todo update --auto-check off`).
-- Added a silent local-data retention pass after successful commands: crash
-  staging (1 hour), stale plan locks (30 s), expired check claims (14 s), old
-  install logs (7 days), installer/wrapper staging (1 hour), and only the
-  tool's own temp folders (1 day). Plans, the update cache and your settings
-  are never touched; `ULTRAPLAN_NO_LOCAL_CLEANUP=1` skips the pass.
-- Closed the rollback-copy gap for installer swaps: the kept previous release
-  is retired after the replacing release has run successfully once, after a
-  restored release has itself run, or after seven days, whichever comes first.
-  A copy whose version cannot be attributed is still retired after seven days.
-- Aligned the package, lockfile, Claude Code plugin metadata and README install
-  example with version 0.5.4.
+Privacy and local-data release on top of 0.5.2 (0.5.3 was never released).
+
+- Added `PRIVACY.md`: everything UltraPlan sends and writes. It covers the
+  anonymous daily update check and its opt-outs (`UT_TODO_NO_UPDATE_CHECK=1`,
+  `ut-todo update --auto-check off`), every local path with its contents,
+  lifetime and what removes it, and how to delete everything. The README
+  Privacy section is now a five-line summary that links to it. `docs/updates.md`,
+  `SECURITY.md`, the AGENTS.md snippet and the Claude Code skill describe the
+  same check. The package now ships `PRIVACY.md` and `docs/`.
+- Local-data cleanup: after a successful plan command, `ut-todo` removes debris
+  older than its lifetime: crash staging in the plan folder and the update
+  cache (1 hour), a stale plan lock (30 s), an expired check claim (14 s), a
+  dead update's install lock (10 minutes), an `update.log` 7 days after its
+  last line, installer and wrapper staging (1 hour), and only its own
+  `ut-todo-update-*`, `ultraplan-install.*` and `ultraplan-install-*` temp
+  folders (1 day). Plans, `update.json`, live releases and Node.js runtimes are
+  never touched. `ULTRAPLAN_NO_LOCAL_CLEANUP=1` skips the pass.
+- The same pass is a backstop for the rollback copy: it removes
+  `<app>/release-<new>.previous` once the release the wrapper names has run a
+  command, or 7 days after the swap, even if `update.json` and its rollback
+  record were deleted. `ut-todo update --rollback` is unchanged.
+- The Claude Code skill now tells agents to run `ut-todo update` only when the
+  operator asks, because outside a terminal it installs without a prompt.
+- The package, lockfile and Claude Code plugin metadata are at 0.5.4, and the
+  README's npm example pins `v0.5.4`.
 
 ## 0.5.2 — 2026-11-26
 
